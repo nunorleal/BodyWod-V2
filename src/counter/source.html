@@ -1,0 +1,1212 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FitTempo - Ritmo de Treino & Metrónomo</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        [hidden] { display: none !important; }
+        .mode-tabs { display: flex; border-bottom: 1px solid #334155; }
+        .mode-tabs button { flex: 1; padding: 12px 4px; color: #94a3b8; border-bottom: 2px solid transparent; }
+        .mode-tabs button[aria-selected="true"] { color: #34d399; border-color: #34d399; }
+        .manual-clock { font-size: 36px; font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; padding: 20px 0; }
+        .manual-tap { width: 100%; min-height: 260px; height: 40vh; max-height: 440px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: #064e3b; border: 1px solid #34d399; border-radius: 8px; touch-action: manipulation; }
+        .manual-tap:active { background: #065f46; }
+        .manual-tap:disabled { opacity: .5; }
+        .manual-tap strong { font-size: 72px; line-height: 1; font-variant-numeric: tabular-nums; max-width: 100%; overflow-wrap: anywhere; }
+        .manual-actions { display: flex; gap: 12px; margin-top: 16px; }
+        .manual-actions button { min-width: 48px; min-height: 48px; border: 1px solid #475569; border-radius: 8px; display: flex; align-items: center; justify-content: center; padding: 12px; }
+        .manual-actions button:disabled { opacity: .4; }
+        * {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        
+        .pulse-ring {
+            animation: pulse-ring 1.2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+        }
+        
+        @keyframes pulse-ring {
+            0% { transform: scale(0.92); opacity: 0.8; }
+            50% { transform: scale(1.08); opacity: 0.3; }
+            100% { transform: scale(0.92); opacity: 0.8; }
+        }
+
+        .beat-flash {
+            animation: beat-flash-anim 0.15s ease-out;
+        }
+
+        @keyframes beat-flash-anim {
+            0% { transform: scale(1.05); filter: brightness(1.3); }
+            100% { transform: scale(1); filter: brightness(1); }
+        }
+
+        /* Custom scrollbar for dark theme */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 9999px;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between items-center p-3 sm:p-6 overflow-x-hidden">
+
+    <!-- Cabeçalho Superior -->
+    <header class="w-full max-w-md flex justify-between items-center py-2 px-1 border-b border-slate-800/80">
+        <div class="flex items-center gap-2.5">
+            <div class="p-2 bg-gradient-to-tr from-emerald-500 to-cyan-500 rounded-xl shadow-lg shadow-emerald-500/20">
+                <i data-lucide="activity" class="text-slate-950 w-5 h-5 font-bold"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-black tracking-tight bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
+                    FitTempo
+                </h1>
+                <p class="text-[10px] text-slate-400 font-medium -mt-1">Controlador de Ritmo</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <!-- Alternar Voz -->
+            <button id="voiceToggleBtn" title="Voz Guia" class="p-2 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-purple-400 transition-all">
+                <i data-lucide="mic" id="voiceIcon" class="w-4 h-4"></i>
+            </button>
+            <!-- Alternar Som -->
+            <button id="soundToggleBtn" title="Som de Metrónomo" class="p-2 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 transition-all">
+                <i data-lucide="volume-2" id="soundIcon" class="w-4 h-4 text-emerald-400"></i>
+            </button>
+            <!-- Abrir Histórico -->
+            <button id="historyModalBtn" title="Histórico de Treinos" class="p-2 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 transition-all">
+                <i data-lucide="history" class="w-4 h-4 text-cyan-400"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Conteúdo Principal -->
+    <main class="w-full max-w-md my-auto py-3 flex flex-col gap-3.5">
+        <div class="mode-tabs" role="tablist" aria-label="Modo de treino">
+            <button id="automaticTab" role="tab" aria-selected="true" aria-controls="automaticPanel">Automático</button>
+            <button id="manualTab" role="tab" aria-selected="false" aria-controls="manualPanel" tabindex="-1">Séries por toque</button>
+        </div>
+        <section id="manualPanel" role="tabpanel" aria-labelledby="manualTab" hidden>
+            <fieldset class="flex justify-center gap-6 py-3" aria-label="Contagem de séries">
+                <label class="flex items-center gap-2"><input type="radio" name="seriesMode" value="manual" checked> Manual</label>
+                <label class="flex items-center gap-2"><input type="radio" name="seriesMode" value="auto"> Automático</label>
+            </fieldset>
+            <p id="seriesTiming" class="text-center text-sm text-cyan-400" role="status" hidden></p>
+            <div id="manualClock" class="manual-clock" role="timer" aria-label="Tempo de treino">00:00:00</div>
+            <button id="manualTap" class="manual-tap" aria-label="Adicionar uma série">
+                <strong id="manualCount" aria-live="polite">0</strong>
+                <span>Séries</span>
+                <i data-lucide="plus" class="w-7 h-7" aria-hidden="true"></i>
+            </button>
+            <div class="manual-actions">
+                <button id="manualStart" class="flex-1" title="Iniciar cronómetro"><i data-lucide="play" class="w-5 h-5" aria-hidden="true"></i><span id="manualStartLabel" class="ml-2">Iniciar</span></button>
+                <button id="manualUndo" title="Desfazer última série" aria-label="Desfazer última série" disabled><i data-lucide="undo-2" class="w-5 h-5"></i></button>
+                <button id="manualReset" title="Repor séries e cronómetro" aria-label="Repor séries e cronómetro"><i data-lucide="rotate-ccw" class="w-5 h-5"></i></button>
+            </div>
+        </section>
+        <div id="automaticPanel" role="tabpanel" aria-labelledby="automaticTab" class="flex flex-col gap-3.5">
+
+        <!-- ECRÃ PRINCIPAL DE METRÓNOMO & MONITORIZAÇÃO -->
+        <div id="displayCard" class="bg-gradient-to-b from-slate-900 to-slate-900/90 border border-slate-800/80 rounded-3xl p-5 shadow-2xl flex flex-col items-center text-center relative overflow-hidden">
+            
+            <!-- Efeito de brilho de fundo -->
+            <div id="glowBg" class="absolute -inset-1 bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 rounded-3xl blur-xl opacity-50 transition-opacity"></div>
+
+            <!-- Indicador de Fase do Treino -->
+            <div id="phaseBadge" class="relative z-10 px-4 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-slate-800/80 text-slate-300 border border-slate-700/50 mb-1 transition-all duration-300 shadow-sm">
+                Configuração Inicial
+            </div>
+
+            <!-- Anel de Progresso & Contador Gigante -->
+            <div id="visualBeatBox" class="relative z-10 my-2 flex items-center justify-center w-48 h-48 sm:w-52 sm:h-52 transition-transform duration-100">
+                <svg class="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                    <!-- Target Track Background -->
+                    <circle cx="50" cy="50" r="42" stroke="currentColor" stroke-width="7" class="text-slate-800/80" fill="transparent" />
+                    <!-- Sub-Progress Bar (Ex: fases da repetição) -->
+                    <circle id="subProgressCircle" cx="50" cy="50" r="42" stroke="currentColor" stroke-width="7" class="text-cyan-500/30 transition-all duration-150" fill="transparent" stroke-dasharray="263.89" stroke-dashoffset="263.89" stroke-linecap="round" />
+                    <!-- Progress Bar Principal -->
+                    <circle id="progressCircle" cx="50" cy="50" r="42" stroke="currentColor" stroke-width="7" class="text-emerald-400 transition-all duration-200" fill="transparent" stroke-dasharray="263.89" stroke-dashoffset="0" stroke-linecap="round" />
+                </svg>
+                
+                <div class="absolute flex flex-col items-center justify-center px-2">
+                    <span id="mainDisplay" class="text-5xl sm:text-6xl font-black tracking-tight text-white drop-shadow-md">100</span>
+                    <span id="mainSubtext" class="text-[10px] sm:text-xs uppercase font-bold tracking-widest text-slate-400 mt-1">Repetições Totais</span>
+                    <span id="tempoPhaseLabel" class="text-[11px] font-semibold text-cyan-400 h-4 mt-0.5"></span>
+                </div>
+            </div>
+
+            <!-- Estatísticas do Treino em Tempo Real -->
+            <div class="relative z-10 grid grid-cols-3 gap-2 w-full mt-1 pt-3 border-t border-slate-800 text-center">
+                <div class="bg-slate-950/60 p-2 rounded-2xl border border-slate-800/80">
+                    <p class="text-[10px] text-slate-400 uppercase font-semibold">Série</p>
+                    <p id="statSets" class="text-base font-extrabold text-slate-100">0 / 10</p>
+                </div>
+                <div class="bg-slate-950/60 p-2 rounded-2xl border border-slate-800/80">
+                    <p class="text-[10px] text-slate-400 uppercase font-semibold">Concluídas</p>
+                    <p id="statReps" class="text-base font-extrabold text-emerald-400">0</p>
+                </div>
+                <div class="bg-slate-950/60 p-2 rounded-2xl border border-slate-800/80">
+                    <p class="text-[10px] text-slate-400 uppercase font-semibold">Ritmo</p>
+                    <p id="statTempo" class="text-base font-extrabold text-cyan-400">60 BPM</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- PAINEL DE CONFIGURAÇÃO E PREDEFINIÇÕES -->
+        <div id="setupControls" class="bg-slate-900/60 border border-slate-800 rounded-3xl p-4 flex flex-col gap-3 shadow-xl backdrop-blur-sm">
+            
+            <!-- Barra de Predefinições Rápidas -->
+            <div class="flex items-center justify-between gap-1 overflow-x-auto pb-1">
+                <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">Presets:</span>
+                <div class="flex gap-1.5">
+                    <button data-preset="pushups" class="preset-btn text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-xl hover:bg-emerald-500/20 transition-all whitespace-nowrap">
+                        100 Flexões
+                    </button>
+                    <button data-preset="squats" class="preset-btn text-[11px] font-semibold bg-slate-800 text-slate-300 border border-slate-700/60 px-2.5 py-1 rounded-xl hover:bg-slate-700 transition-all whitespace-nowrap">
+                        Agachamento Tempo
+                    </button>
+                    <button data-preset="tabata" class="preset-btn text-[11px] font-semibold bg-slate-800 text-slate-300 border border-slate-700/60 px-2.5 py-1 rounded-xl hover:bg-slate-700 transition-all whitespace-nowrap">
+                        Tabata 20/10
+                    </button>
+                </div>
+            </div>
+
+            <!-- Definições Principais de Repetições -->
+            <div class="grid grid-cols-2 gap-2.5">
+                <div class="bg-slate-950/80 p-2.5 rounded-2xl border border-slate-800">
+                    <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Meta de Repetições</label>
+                    <div class="flex items-center gap-1">
+                        <input type="number" id="inputTotalReps" value="100" min="1" max="1000" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-2.5 py-1 text-base font-extrabold text-emerald-400 focus:outline-none focus:border-emerald-500">
+                    </div>
+                </div>
+
+                <div class="bg-slate-950/80 p-2.5 rounded-2xl border border-slate-800">
+                    <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Reps por Série</label>
+                    <div class="flex items-center gap-1">
+                        <input type="number" id="inputRepsPerSet" value="10" min="1" max="500" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-2.5 py-1 text-base font-extrabold text-emerald-400 focus:outline-none focus:border-emerald-500">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Controlo do Metrónomo & Ritmo por Repetição -->
+            <div class="bg-slate-950/80 p-3 rounded-2xl border border-slate-800 flex flex-col gap-2.5">
+                <div class="flex justify-between items-center">
+                    <span class="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                        <i data-lucide="gauge" class="w-4 h-4 text-cyan-400"></i> Ritmo & Cadência
+                    </span>
+                    
+                    <!-- Botões Rápidos de BPM -->
+                    <div class="flex gap-1" id="bpmPresets">
+                        <button data-bpm="30" class="bpm-preset-btn text-[10px] bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded-lg text-slate-300 font-semibold transition-all">30</button>
+                        <button data-bpm="45" class="bpm-preset-btn text-[10px] bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded-lg text-slate-300 font-semibold transition-all">45</button>
+                        <button data-bpm="60" class="bpm-preset-btn text-[10px] bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded-lg text-cyan-400 border border-cyan-500/30 font-bold transition-all">60</button>
+                        <button data-bpm="90" class="bpm-preset-btn text-[10px] bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded-lg text-slate-300 font-semibold transition-all">90</button>
+                    </div>
+                </div>
+
+                <!-- Modos de Ritmo: Simples (BPM) vs Cadência Avançada (Ex: 3-1-1-0) -->
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                    <div class="bg-slate-900 p-2 rounded-xl border border-slate-800 flex flex-col">
+                        <label class="text-[10px] text-slate-400 uppercase font-bold">BPM (Batimentos)</label>
+                        <input type="number" id="inputBpm" value="60" min="10" max="300" class="w-full bg-transparent text-xl font-black text-cyan-400 focus:outline-none">
+                    </div>
+
+                    <div class="bg-slate-900 p-2 rounded-xl border border-slate-800 flex flex-col">
+                        <label class="text-[10px] text-slate-400 uppercase font-bold">Tempo Total por Rep</label>
+                        <div class="flex items-baseline gap-1">
+                            <input type="number" id="inputSecPerRep" value="1.0" step="0.1" min="0.2" max="60" class="w-full bg-transparent text-xl font-black text-slate-100 focus:outline-none">
+                            <span class="text-xs text-slate-400 font-bold">s</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Detalhes Opcionais de Cadência (Excêntrica - Pausa - Concêntrica - Pausa) -->
+                <div class="border-t border-slate-800/80 pt-2 flex flex-col gap-1.5">
+                    <div class="flex justify-between items-center">
+                        <label class="text-[10px] font-bold text-slate-400 uppercase">Fases da Repetição (Segundos)</label>
+                        <span class="text-[10px] text-cyan-400 font-mono" id="tempoCodeDisplay">1-0-1-0</span>
+                    </div>
+                    <div class="grid grid-cols-4 gap-1.5 text-center">
+                        <div class="bg-slate-900/90 p-1.5 rounded-lg border border-slate-800">
+                            <span class="text-[9px] text-slate-400 block font-semibold">Baixar</span>
+                            <input type="number" id="tempoEccentric" value="1" min="0.5" max="10" step="0.5" class="w-full text-center bg-transparent text-xs font-bold text-slate-200 focus:outline-none">
+                        </div>
+                        <div class="bg-slate-900/90 p-1.5 rounded-lg border border-slate-800">
+                            <span class="text-[9px] text-slate-400 block font-semibold">Pausa 1</span>
+                            <input type="number" id="tempoPause1" value="0" min="0" max="10" step="0.5" class="w-full text-center bg-transparent text-xs font-bold text-slate-200 focus:outline-none">
+                        </div>
+                        <div class="bg-slate-900/90 p-1.5 rounded-lg border border-slate-800">
+                            <span class="text-[9px] text-slate-400 block font-semibold">Subir</span>
+                            <input type="number" id="tempoConcentric" value="1" min="0.5" max="10" step="0.5" class="w-full text-center bg-transparent text-xs font-bold text-slate-200 focus:outline-none">
+                        </div>
+                        <div class="bg-slate-900/90 p-1.5 rounded-lg border border-slate-800">
+                            <span class="text-[9px] text-slate-400 block font-semibold">Pausa 2</span>
+                            <input type="number" id="tempoPause2" value="0" min="0" max="10" step="0.5" class="w-full text-center bg-transparent text-xs font-bold text-slate-200 focus:outline-none">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tempos de Intervalo (Preparação e Descanso) -->
+            <div class="grid grid-cols-2 gap-2.5">
+                <div class="bg-slate-950/80 p-2.5 rounded-2xl border border-slate-800">
+                    <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Contagem (Prep)</label>
+                    <div class="flex items-center gap-1">
+                        <input type="number" id="inputCountIn" value="3" min="0" max="15" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-2.5 py-1 text-base font-extrabold text-purple-400 focus:outline-none focus:border-purple-500">
+                        <span class="text-xs text-slate-400 font-bold">s</span>
+                    </div>
+                </div>
+
+                <div class="bg-slate-950/80 p-2.5 rounded-2xl border border-slate-800">
+                    <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Descanso / Séries</label>
+                    <div class="flex items-center gap-1">
+                        <input type="number" id="inputRestTime" value="15" min="1" max="300" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-2.5 py-1 text-base font-extrabold text-amber-400 focus:outline-none focus:border-amber-500">
+                        <span class="text-xs text-slate-400 font-bold">s</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Resumo Calculado -->
+            <div class="text-[11px] text-slate-400 text-center bg-slate-950/40 py-2 px-3 rounded-xl border border-slate-800/60 leading-snug">
+                Plano: <span id="summaryText" class="text-slate-200 font-semibold">10 séries de 10 reps (10s ativo + 15s descanso)</span>
+            </div>
+        </div>
+
+        <!-- BOTÕES DE EXECUÇÃO -->
+        <div class="flex gap-2.5">
+            <button id="startBtn" class="flex-1 bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-black py-4 rounded-2xl shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 text-lg transition-all active:scale-95">
+                <i data-lucide="play" class="fill-current w-6 h-6"></i>
+                INICIAR TREINO
+            </button>
+            
+            <button id="pauseBtn" class="hidden flex-1 bg-gradient-to-r from-amber-500 to-orange-400 hover:from-amber-400 hover:to-orange-300 text-slate-950 font-black py-4 rounded-2xl shadow-lg shadow-amber-500/25 flex items-center justify-center gap-2 text-lg transition-all active:scale-95">
+                <i data-lucide="pause" class="fill-current w-6 h-6"></i>
+                PAUSAR
+            </button>
+
+            <button id="resetBtn" title="Reiniciar" class="bg-slate-900 hover:bg-slate-800 text-slate-300 p-4 rounded-2xl border border-slate-800 transition-all active:scale-95 flex items-center justify-center">
+                <i data-lucide="rotate-ccw" class="w-6 h-6"></i>
+            </button>
+        </div>
+
+        </div>
+    </main>
+
+    <!-- MODAL DE HISTÓRICO DE TREINOS -->
+    <div id="historyModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-300">
+        <div class="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-5 shadow-2xl flex flex-col gap-4 max-h-[85vh]">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="trophy" class="text-amber-400 w-5 h-5"></i>
+                    <h2 class="text-base font-bold text-white">Histórico & Estatísticas</h2>
+                </div>
+                <button id="closeHistoryBtn" class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 text-center">
+                <div class="bg-slate-950 p-3 rounded-2xl border border-slate-800">
+                    <p class="text-[10px] text-slate-400 uppercase font-bold">Total Concluídos</p>
+                    <p id="statTotalWorkouts" class="text-xl font-black text-emerald-400">0</p>
+                </div>
+                <div class="bg-slate-950 p-3 rounded-2xl border border-slate-800">
+                    <p class="text-[10px] text-slate-400 uppercase font-bold">Reps Totais Feitas</p>
+                    <p id="statTotalRepsAllTime" class="text-xl font-black text-cyan-400">0</p>
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-y-auto pr-1 flex flex-col gap-2" id="historyList">
+                <p class="text-xs text-slate-500 text-center py-6">Ainda não tens treinos registados.</p>
+            </div>
+
+            <button id="clearHistoryBtn" class="text-xs text-red-400 hover:text-red-300 text-center py-1">
+                Limpar Histórico
+            </button>
+        </div>
+    </div>
+
+    <!-- Rodapé -->
+    <footer class="text-[11px] text-slate-500 text-center py-2 flex items-center gap-2">
+        <span>FitTempo • Mantenha o ritmo</span>
+        <span class="text-slate-700">•</span>
+        <span id="wakeLockStatus" class="text-slate-600 flex items-center gap-1">
+            <i data-lucide="sun" class="w-3 h-3"></i> Tela ativa
+        </span>
+    </footer>
+
+    <!-- LÓGICA JAVASCRIPT INTEGRADA -->
+    <script>
+        // Inicializar ícones da biblioteca Lucide
+        lucide.createIcons();
+
+        // Elementos DOM Principais
+        const inputTotalReps = document.getElementById('inputTotalReps');
+        const inputRepsPerSet = document.getElementById('inputRepsPerSet');
+        const inputBpm = document.getElementById('inputBpm');
+        const inputSecPerRep = document.getElementById('inputSecPerRep');
+        const inputCountIn = document.getElementById('inputCountIn');
+        const inputRestTime = document.getElementById('inputRestTime');
+        
+        const tempoEccentric = document.getElementById('tempoEccentric');
+        const tempoPause1 = document.getElementById('tempoPause1');
+        const tempoConcentric = document.getElementById('tempoConcentric');
+        const tempoPause2 = document.getElementById('tempoPause2');
+        const tempoCodeDisplay = document.getElementById('tempoCodeDisplay');
+
+        const summaryText = document.getElementById('summaryText');
+        const mainDisplay = document.getElementById('mainDisplay');
+        const mainSubtext = document.getElementById('mainSubtext');
+        const tempoPhaseLabel = document.getElementById('tempoPhaseLabel');
+        const phaseBadge = document.getElementById('phaseBadge');
+        const glowBg = document.getElementById('glowBg');
+        const visualBeatBox = document.getElementById('visualBeatBox');
+
+        const progressCircle = document.getElementById('progressCircle');
+        const subProgressCircle = document.getElementById('subProgressCircle');
+
+        const statSets = document.getElementById('statSets');
+        const statReps = document.getElementById('statReps');
+        const statTempo = document.getElementById('statTempo');
+
+        const startBtn = document.getElementById('startBtn');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const soundToggleBtn = document.getElementById('soundToggleBtn');
+        const soundIcon = document.getElementById('soundIcon');
+        const voiceToggleBtn = document.getElementById('voiceToggleBtn');
+        const voiceIcon = document.getElementById('voiceIcon');
+        
+        const historyModal = document.getElementById('historyModal');
+        const historyModalBtn = document.getElementById('historyModalBtn');
+        const closeHistoryBtn = document.getElementById('closeHistoryBtn');
+        const historyList = document.getElementById('historyList');
+        const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+
+        // Estado Global da Aplicação
+        let state = {
+            status: 'IDLE', // IDLE, COUNT_IN, WORK, REST, PAUSED, FINISHED
+            totalRepsGoal: 100,
+            repsPerSet: 10,
+            bpm: 60,
+            secPerRep: 1.0,
+            countInSec: 3,
+            restSec: 15,
+            
+            // Fases do Ritmo (Cadência)
+            cadence: {
+                eccentric: 1.0,
+                pause1: 0,
+                concentric: 1.0,
+                pause2: 0
+            },
+            
+            currentSet: 1,
+            totalSets: 10,
+            currentRepInSet: 0,
+            totalRepsDone: 0,
+            
+            timer: null,
+            subTimer: null,
+            countInRemaining: 0,
+            restSecondsRemaining: 0,
+
+            isSoundEnabled: true,
+            isVoiceEnabled: true,
+
+            wakeLock: null
+        };
+
+        const CIRCUMFERENCE = 2 * Math.PI * 42; // r=42 -> ~263.89
+
+        // Sintetizador Web Audio API para Som Preciso e sem Lag
+        let audioCtx = null;
+
+        function initAudioContext() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playSound(freq = 600, type = 'sine', duration = 0.08, volume = 0.3) {
+            if (!state.isSoundEnabled) return;
+            try {
+                initAudioContext();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                
+                gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+                
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch (e) {
+                console.error("Erro na síntese de áudio:", e);
+            }
+        }
+
+        // Guia por Voz com Web Speech API
+        let guideVoice = null;
+        let speechTimer = null;
+
+        function loadGuideVoice() {
+            if (!('speechSynthesis' in window)) return null;
+
+            const voices = window.speechSynthesis.getVoices();
+            if (!voices.length) return null;
+
+            guideVoice =
+                voices.find(v => /pt[-_]PT/i.test(v.lang) && /joana|maria|ines|female|mulher/i.test(v.name)) ||
+                voices.find(v => /^pt[-_]/i.test(v.lang) && /luciana|maria|female|mulher/i.test(v.name)) ||
+                voices.find(v => /pt[-_]PT/i.test(v.lang)) ||
+                voices.find(v => /^pt[-_]/i.test(v.lang)) ||
+                voices[0];
+
+            return guideVoice;
+        }
+
+        function initSpeech() {
+            if (!('speechSynthesis' in window)) return;
+            loadGuideVoice();
+            window.speechSynthesis.onvoiceschanged = loadGuideVoice;
+        }
+
+        function speak(text, force = false) {
+            clearTimeout(speechTimer);
+            if ((!state.isVoiceEnabled && !force) || !('speechSynthesis' in window)) return;
+            try {
+                if (!guideVoice) loadGuideVoice();
+                window.speechSynthesis.cancel();
+
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'pt-PT';
+                if (guideVoice) utterance.voice = guideVoice;
+                utterance.rate = 1.05;
+                utterance.pitch = 1.0;
+
+                speechTimer = setTimeout(() => {
+                    speechTimer = null;
+                    if (state.isVoiceEnabled || force) window.speechSynthesis.speak(utterance);
+                }, 20);
+            } catch (e) {
+                console.log("Síntese de voz indisponível", e);
+            }
+        }
+
+        // Manter Ecrã Ligado durante o treino
+        async function requestWakeLock() {
+            if ('wakeLock' in navigator) {
+                try {
+                    state.wakeLock = await navigator.wakeLock.request('screen');
+                } catch (err) {
+                    console.log("Wake Lock não permitido:", err.message);
+                }
+            }
+        }
+
+        function releaseWakeLock() {
+            if (state.wakeLock !== null) {
+                state.wakeLock.release().then(() => {
+                    state.wakeLock = null;
+                });
+            }
+        }
+
+        // Atualizar e Sincronizar Ritmo de Treino
+        function updateCadenceValues() {
+            const ecc = Math.max(0.2, parseFloat(tempoEccentric.value) || 1);
+            const p1 = Math.max(0, parseFloat(tempoPause1.value) || 0);
+            const conc = Math.max(0.2, parseFloat(tempoConcentric.value) || 1);
+            const p2 = Math.max(0, parseFloat(tempoPause2.value) || 0);
+
+            state.cadence = { eccentric: ecc, pause1: p1, concentric: conc, pause2: p2 };
+            
+            const totalRepSec = parseFloat((ecc + p1 + conc + p2).toFixed(2));
+            state.secPerRep = totalRepSec;
+            inputSecPerRep.value = totalRepSec;
+            
+            state.bpm = Math.round(60 / totalRepSec);
+            inputBpm.value = state.bpm;
+
+            tempoCodeDisplay.textContent = `${ecc}-${p1}-${conc}-${p2}`;
+            highlightBpmPreset(state.bpm);
+            updateCalculations();
+        }
+
+        function syncTempoFromBpm() {
+            let bpm = Math.max(10, parseInt(inputBpm.value) || 60);
+            state.bpm = bpm;
+            const sec = parseFloat((60 / bpm).toFixed(2));
+            state.secPerRep = sec;
+            inputSecPerRep.value = sec;
+
+            // Distribuir proporcionalmente pelas fases da repetição
+            const halfSec = parseFloat((sec / 2).toFixed(2));
+            tempoEccentric.value = halfSec;
+            tempoPause1.value = 0;
+            tempoConcentric.value = halfSec;
+            tempoPause2.value = 0;
+            
+            state.cadence = { eccentric: halfSec, pause1: 0, concentric: halfSec, pause2: 0 };
+            tempoCodeDisplay.textContent = `${halfSec}-0-${halfSec}-0`;
+            
+            highlightBpmPreset(bpm);
+            updateCalculations();
+        }
+
+        function syncTempoFromSec() {
+            let sec = Math.max(0.2, parseFloat(inputSecPerRep.value) || 1.0);
+            state.secPerRep = sec;
+            state.bpm = Math.round(60 / sec);
+            inputBpm.value = state.bpm;
+
+            const halfSec = parseFloat((sec / 2).toFixed(2));
+            tempoEccentric.value = halfSec;
+            tempoPause1.value = 0;
+            tempoConcentric.value = halfSec;
+            tempoPause2.value = 0;
+
+            state.cadence = { eccentric: halfSec, pause1: 0, concentric: halfSec, pause2: 0 };
+            tempoCodeDisplay.textContent = `${halfSec}-0-${halfSec}-0`;
+
+            highlightBpmPreset(state.bpm);
+            updateCalculations();
+        }
+
+        function highlightBpmPreset(currentBpm) {
+            document.querySelectorAll('.bpm-preset-btn').forEach(btn => {
+                const bpmVal = parseInt(btn.getAttribute('data-bpm'));
+                if (Math.abs(bpmVal - currentBpm) <= 2) {
+                    btn.className = "bpm-preset-btn text-[10px] bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded-lg text-cyan-400 border border-cyan-500/30 font-bold transition-all";
+                } else {
+                    btn.className = "bpm-preset-btn text-[10px] bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded-lg text-slate-300 font-semibold transition-all";
+                }
+            });
+        }
+
+        // Recalcular resumo global
+        function updateCalculations() {
+            if (state.status !== 'IDLE') return;
+
+            state.totalRepsGoal = Math.max(1, parseInt(inputTotalReps.value) || 1);
+            state.repsPerSet = Math.max(1, parseInt(inputRepsPerSet.value) || 1);
+            state.countInSec = Math.max(0, parseInt(inputCountIn.value) || 0);
+            state.restSec = Math.max(1, parseInt(inputRestTime.value) || 0);
+
+            state.totalSets = Math.ceil(state.totalRepsGoal / state.repsPerSet);
+            const activeSecPerSet = (state.repsPerSet * state.secPerRep).toFixed(1);
+            
+            summaryText.textContent = `${state.totalSets} séries de ${state.repsPerSet} reps (${activeSecPerSet}s ativo + ${state.restSec}s descanso)`;
+            
+            statSets.textContent = `0 / ${state.totalSets}`;
+            statReps.textContent = "0";
+            statTempo.textContent = `${state.bpm} BPM`;
+            
+            mainDisplay.textContent = state.totalRepsGoal;
+            mainSubtext.textContent = 'Repetições Totais';
+            tempoPhaseLabel.textContent = '';
+            
+            setMainProgress(1);
+            setSubProgress(0);
+        }
+
+        function setMainProgress(percent) {
+            const offset = CIRCUMFERENCE - (Math.max(0, Math.min(1, percent)) * CIRCUMFERENCE);
+            progressCircle.style.strokeDashoffset = offset;
+        }
+
+        function setSubProgress(percent) {
+            const offset = CIRCUMFERENCE - (Math.max(0, Math.min(1, percent)) * CIRCUMFERENCE);
+            subProgressCircle.style.strokeDashoffset = offset;
+        }
+
+        function triggerVisualBeat() {
+            visualBeatBox.classList.remove('beat-flash');
+            void visualBeatBox.offsetWidth; // Force Reflow
+            visualBeatBox.classList.add('beat-flash');
+        }
+
+        // Iniciar Treino
+        function startWorkout() {
+            initAudioContext();
+            initSpeech();
+            requestWakeLock();
+
+            if (state.status === 'PAUSED') {
+                resumeWorkout();
+                return;
+            }
+
+            state.currentSet = 1;
+            state.currentRepInSet = 0;
+            state.totalRepsDone = 0;
+            
+            toggleUIState(true);
+
+            if (state.countInSec > 0) {
+                runCountInPhase();
+            } else {
+                runWorkPhase();
+            }
+        }
+
+        // Contagem Regressiva Inicial (Count-In)
+        function runCountInPhase() {
+            state.status = 'COUNT_IN';
+            state.countInRemaining = state.countInSec;
+
+            phaseBadge.textContent = "Em Posição!";
+            phaseBadge.className = "relative z-10 px-4 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-purple-500/20 text-purple-300 border border-purple-500/40 mb-1 animate-pulse shadow-lg shadow-purple-500/10";
+            progressCircle.setAttribute('class', 'text-purple-400 transition-all duration-300');
+
+            mainDisplay.textContent = state.countInRemaining;
+            mainSubtext.textContent = "Preparar...";
+            tempoPhaseLabel.textContent = "";
+            setMainProgress(1);
+
+            playSound(500, 'sine', 0.1);
+            speak("Preparar!");
+
+            state.timer = setInterval(() => {
+                state.countInRemaining--;
+                
+                if (state.countInRemaining > 0) {
+                    mainDisplay.textContent = state.countInRemaining;
+                    setMainProgress(state.countInRemaining / state.countInSec);
+                    playSound(500, 'sine', 0.1);
+                    speak(state.countInRemaining.toString());
+                } else {
+                    clearInterval(state.timer);
+                    playSound(1000, 'triangle', 0.3);
+                    runWorkPhase();
+                }
+            }, 1000);
+        }
+
+        // Execução do Treino (Ativo)
+        function runWorkPhase() {
+            state.status = 'WORK';
+            phaseBadge.textContent = `Série ${state.currentSet} de ${state.totalSets} • Em Exercício`;
+            phaseBadge.className = "relative z-10 px-4 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 mb-1 animate-pulse shadow-lg shadow-emerald-500/10";
+            progressCircle.setAttribute('class', 'text-emerald-400 transition-all duration-200');
+
+            statSets.textContent = `${state.currentSet} / ${state.totalSets}`;
+
+            const remainingRepsTotal = state.totalRepsGoal - state.totalRepsDone;
+            const targetRepsInSet = Math.min(state.repsPerSet, remainingRepsTotal);
+
+            state.currentRepInSet = 0;
+            executeNextRep(targetRepsInSet);
+        }
+
+        function executeNextRep(targetRepsInSet) {
+            if (state.status !== 'WORK') return;
+
+            state.currentRepInSet++;
+            state.totalRepsDone++;
+
+            // Atualizar ecrã
+            mainDisplay.textContent = state.currentRepInSet;
+            mainSubtext.textContent = `Repetição (${state.totalRepsDone}/${state.totalRepsGoal})`;
+            statReps.textContent = state.totalRepsDone;
+
+            const repProgress = state.currentRepInSet / targetRepsInSet;
+            setMainProgress(repProgress);
+
+            // Bip Inicial da Repetição
+            playSound(800, 'sine', 0.08);
+            triggerVisualBeat();
+
+            // Fala o número da repetição
+            speak(state.currentRepInSet.toString());
+
+            // Ciclo interno por fases da cadência
+            runCadencePhases(() => {
+                if (state.currentRepInSet >= targetRepsInSet || state.totalRepsDone >= state.totalRepsGoal) {
+                    // Série Concluída
+                    playSound(1200, 'triangle', 0.25);
+                    if (state.totalRepsDone >= state.totalRepsGoal || state.currentSet >= state.totalSets) {
+                        finishWorkout();
+                    } else {
+                        runRestPhase();
+                    }
+                } else {
+                    executeNextRep(targetRepsInSet);
+                }
+            });
+        }
+
+        // Execução das subfases da repetição (Excêntrica, Pausa, Concêntrica)
+        function runCadencePhases(onCompleteRep) {
+            const phases = [
+                { name: 'Baixar ⬇️', duration: state.cadence.eccentric },
+                { name: 'Pausa ⏸️', duration: state.cadence.pause1 },
+                { name: 'Subir ⬆️', duration: state.cadence.concentric },
+                { name: 'Pausa ⏸️', duration: state.cadence.pause2 }
+            ].filter(p => p.duration > 0);
+
+            let phaseIdx = 0;
+
+            function stepPhase() {
+                if (state.status !== 'WORK') return;
+
+                if (phaseIdx >= phases.length) {
+                    onCompleteRep();
+                    return;
+                }
+
+                const currentPhase = phases[phaseIdx];
+                tempoPhaseLabel.textContent = currentPhase.name;
+
+                const startTime = Date.now();
+                const totalDurationMs = currentPhase.duration * 1000;
+
+                state.subTimer = setInterval(() => {
+                    const elapsed = Date.now() - startTime;
+                    const subPercent = elapsed / totalDurationMs;
+                    setSubProgress(subPercent);
+
+                    if (elapsed >= totalDurationMs) {
+                        clearInterval(state.subTimer);
+                        phaseIdx++;
+                        stepPhase();
+                    }
+                }, 50);
+            }
+
+            stepPhase();
+        }
+
+        // Fase de Descanso entre Séries
+        function runRestPhase() {
+            state.status = 'REST';
+            state.currentSet++;
+            state.restSecondsRemaining = state.restSec;
+
+            phaseBadge.textContent = "Pausa / Descanso";
+            phaseBadge.className = "relative z-10 px-4 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-amber-500/20 text-amber-400 border border-amber-500/40 mb-1 shadow-lg shadow-amber-500/10";
+            progressCircle.setAttribute('class', 'text-amber-400 transition-all duration-300');
+
+            mainDisplay.textContent = state.restSecondsRemaining;
+            mainSubtext.textContent = "Segundos de Descanso";
+            tempoPhaseLabel.textContent = `Próxima Série: ${state.currentSet}/${state.totalSets}`;
+            setMainProgress(1);
+            setSubProgress(0);
+
+            playSound(400, 'square', 0.2);
+            speak("Descanso");
+
+            state.timer = setInterval(() => {
+                state.restSecondsRemaining--;
+                
+                if (state.restSecondsRemaining > 0) {
+                    mainDisplay.textContent = state.restSecondsRemaining;
+                    setMainProgress(state.restSecondsRemaining / state.restSec);
+                    
+                    if (state.restSecondsRemaining <= 3) {
+                        playSound(650, 'sine', 0.08);
+                        speak(state.restSecondsRemaining.toString());
+                    }
+                } else {
+                    clearInterval(state.timer);
+                    playSound(1000, 'sine', 0.3);
+                    runWorkPhase();
+                }
+            }, 1000);
+        }
+
+        // Pausar e Retomar
+        function pauseWorkout() {
+            if (state.status === 'IDLE' || state.status === 'PAUSED') return;
+
+            clearInterval(state.timer);
+            clearInterval(state.subTimer);
+            state.previousStatus = state.status;
+            state.status = 'PAUSED';
+
+            phaseBadge.textContent = "Pausado";
+            phaseBadge.className = "relative z-10 px-4 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-slate-800 text-slate-300 mb-1 border border-slate-700";
+            
+            startBtn.classList.remove('hidden');
+            pauseBtn.classList.add('hidden');
+            speak("Pausado");
+        }
+
+        function resumeWorkout() {
+            toggleUIState(true);
+            if (state.previousStatus === 'COUNT_IN') {
+                runCountInPhase();
+            } else if (state.previousStatus === 'REST') {
+                runRestPhase();
+            } else {
+                runWorkPhase();
+            }
+        }
+
+        function resetWorkout() {
+            clearInterval(state.timer);
+            clearInterval(state.subTimer);
+            state.status = 'IDLE';
+
+            releaseWakeLock();
+            toggleUIState(false);
+            
+            phaseBadge.textContent = "Configuração Inicial";
+            phaseBadge.className = "relative z-10 px-4 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-slate-800/80 text-slate-300 border border-slate-700/50 mb-1";
+            progressCircle.setAttribute('class', 'text-emerald-400 transition-all duration-200');
+
+            updateCalculations();
+        }
+
+        function finishWorkout() {
+            state.status = 'FINISHED';
+            clearInterval(state.timer);
+            clearInterval(state.subTimer);
+            releaseWakeLock();
+
+            phaseBadge.textContent = "Treino Concluído! 🎉";
+            phaseBadge.className = "relative z-10 px-4 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 mb-1 shadow-lg shadow-cyan-500/10";
+
+            mainDisplay.textContent = "🏆";
+            mainSubtext.textContent = `Total: ${state.totalRepsDone} Repetições!`;
+            tempoPhaseLabel.textContent = "Excelente trabalho!";
+            setMainProgress(1);
+            setSubProgress(1);
+
+            // Som de vitória
+            setTimeout(() => playSound(523.25, 'triangle', 0.15), 0);
+            setTimeout(() => playSound(659.25, 'triangle', 0.15), 150);
+            setTimeout(() => playSound(783.99, 'triangle', 0.15), 300);
+            setTimeout(() => playSound(1046.50, 'triangle', 0.4), 450);
+
+            speak("Treino Concluído! Parabéns!");
+
+            // Guardar no Histórico
+            saveWorkoutToHistory({
+                date: new Date().toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }),
+                reps: state.totalRepsDone,
+                sets: state.totalSets,
+                tempo: `${state.bpm} BPM`
+            });
+
+            toggleUIState(false);
+            startBtn.innerHTML = `<i data-lucide="play" class="fill-current w-6 h-6"></i> NOVO TREINO`;
+            lucide.createIcons();
+        }
+
+        function toggleUIState(isRunning) {
+            if (isRunning) {
+                startBtn.classList.add('hidden');
+                pauseBtn.classList.remove('hidden');
+                
+                [inputTotalReps, inputRepsPerSet, inputBpm, inputSecPerRep, inputCountIn, inputRestTime, tempoEccentric, tempoPause1, tempoConcentric, tempoPause2].forEach(i => i.disabled = true);
+                document.querySelectorAll('.preset-btn, .bpm-preset-btn').forEach(b => {
+                    b.disabled = true;
+                    b.classList.add('opacity-50', 'pointer-events-none');
+                });
+            } else {
+                startBtn.classList.remove('hidden');
+                pauseBtn.classList.add('hidden');
+                startBtn.innerHTML = `<i data-lucide="play" class="fill-current w-6 h-6"></i> INICIAR TREINO`;
+                
+                [inputTotalReps, inputRepsPerSet, inputBpm, inputSecPerRep, inputCountIn, inputRestTime, tempoEccentric, tempoPause1, tempoConcentric, tempoPause2].forEach(i => i.disabled = false);
+                document.querySelectorAll('.preset-btn, .bpm-preset-btn').forEach(b => {
+                    b.disabled = false;
+                    b.classList.remove('opacity-50', 'pointer-events-none');
+                });
+                
+                lucide.createIcons();
+            }
+        }
+
+        // Guardar e Carregar Histórico
+        function getHistory() {
+            try {
+                return JSON.parse(localStorage.getItem('fittempo_history') || '[]');
+            } catch (e) {
+                return [];
+            }
+        }
+
+        function saveWorkoutToHistory(record) {
+            const history = getHistory();
+            history.unshift(record);
+            if (history.length > 20) history.pop(); // guardar últimos 20
+            localStorage.setItem('fittempo_history', JSON.stringify(history));
+            renderHistoryModal();
+        }
+
+        function renderHistoryModal() {
+            const history = getHistory();
+            const totalWorkouts = history.length;
+            const totalRepsAllTime = history.reduce((acc, curr) => acc + (curr.reps || 0), 0);
+
+            document.getElementById('statTotalWorkouts').textContent = totalWorkouts;
+            document.getElementById('statTotalRepsAllTime').textContent = totalRepsAllTime;
+
+            if (history.length === 0) {
+                historyList.innerHTML = `<p class="text-xs text-slate-500 text-center py-6">Ainda não tens treinos registados.</p>`;
+                return;
+            }
+
+            historyList.innerHTML = history.map(item => `
+                <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800/80 flex justify-between items-center text-xs">
+                    <div>
+                        <p class="font-bold text-slate-200">${item.reps} Repetições (${item.sets} Séries)</p>
+                        <p class="text-[10px] text-slate-500">${item.date}</p>
+                    </div>
+                    <span class="bg-cyan-500/10 text-cyan-400 px-2 py-0.5 rounded text-[10px] font-bold border border-cyan-500/20">
+                        ${item.tempo}
+                    </span>
+                </div>
+            `).join('');
+        }
+
+        // Listeners de Eventos do Utilizador
+        inputBpm.addEventListener('input', syncTempoFromBpm);
+        inputSecPerRep.addEventListener('input', syncTempoFromSec);
+
+        [tempoEccentric, tempoPause1, tempoConcentric, tempoPause2].forEach(elem => {
+            elem.addEventListener('input', updateCadenceValues);
+        });
+
+        [inputTotalReps, inputRepsPerSet, inputCountIn, inputRestTime].forEach(input => {
+            input.addEventListener('input', updateCalculations);
+        });
+
+        // Botões de Presets de Exercício
+        document.querySelectorAll('.preset-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                if (state.status !== 'IDLE') return;
+                const preset = e.target.getAttribute('data-preset');
+                
+                if (preset === 'pushups') {
+                    inputTotalReps.value = 100;
+                    inputRepsPerSet.value = 10;
+                    inputBpm.value = 60;
+                    inputCountIn.value = 3;
+                    inputRestTime.value = 15;
+                    syncTempoFromBpm();
+                } else if (preset === 'squats') {
+                    inputTotalReps.value = 50;
+                    inputRepsPerSet.value = 10;
+                    tempoEccentric.value = 3;
+                    tempoPause1.value = 1;
+                    tempoConcentric.value = 1;
+                    tempoPause2.value = 0;
+                    inputCountIn.value = 3;
+                    inputRestTime.value = 20;
+                    updateCadenceValues();
+                } else if (preset === 'tabata') {
+                    inputTotalReps.value = 80;
+                    inputRepsPerSet.value = 10;
+                    inputBpm.value = 60;
+                    inputCountIn.value = 5;
+                    inputRestTime.value = 10;
+                    syncTempoFromBpm();
+                }
+            });
+        });
+
+        // Presets Rápidos de BPM
+        document.querySelectorAll('.bpm-preset-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                if (state.status !== 'IDLE') return;
+                const bpm = parseInt(e.target.getAttribute('data-bpm'));
+                inputBpm.value = bpm;
+                syncTempoFromBpm();
+            });
+        });
+
+        // Controlo de Som e Voz
+        soundToggleBtn.addEventListener('click', () => {
+            state.isSoundEnabled = !state.isSoundEnabled;
+            soundIcon.setAttribute('data-lucide', state.isSoundEnabled ? 'volume-2' : 'volume-x');
+            soundIcon.className = state.isSoundEnabled ? "w-4 h-4 text-emerald-400" : "w-4 h-4 text-slate-500";
+            lucide.createIcons();
+            if (state.isSoundEnabled) playSound(800, 'sine', 0.1);
+        });
+
+        voiceToggleBtn.addEventListener('click', () => {
+            initSpeech();
+            state.isVoiceEnabled = !state.isVoiceEnabled;
+            voiceIcon.className = state.isVoiceEnabled ? "w-4 h-4 text-purple-400" : "w-4 h-4 text-slate-500";
+            if (state.isVoiceEnabled) speak("Voz ligada");
+        });
+
+        // Controlo de Modal
+        historyModalBtn.addEventListener('click', () => {
+            renderHistoryModal();
+            historyModal.classList.remove('opacity-0', 'pointer-events-none');
+        });
+
+        closeHistoryBtn.addEventListener('click', () => {
+            historyModal.classList.add('opacity-0', 'pointer-events-none');
+        });
+
+        clearHistoryBtn.addEventListener('click', () => {
+            localStorage.removeItem('fittempo_history');
+            renderHistoryModal();
+        });
+
+        // Controlo Principal
+        startBtn.addEventListener('click', startWorkout);
+        pauseBtn.addEventListener('click', pauseWorkout);
+        resetBtn.addEventListener('click', resetWorkout);
+
+        // Inicialização Inicial
+        const manual = { count: 0, elapsed: 0, startedAt: null, timer: null, automatic: false, calibrationStart: 0, interval: null, nextAt: null };
+        const manualClock = document.getElementById('manualClock');
+        const manualTap = document.getElementById('manualTap');
+        const manualCount = document.getElementById('manualCount');
+        const manualStart = document.getElementById('manualStart');
+        const manualUndo = document.getElementById('manualUndo');
+
+        function manualElapsed() {
+            return manual.elapsed + (manual.startedAt === null ? 0 : performance.now() - manual.startedAt);
+        }
+
+        function announceSeries() {
+            playSound(800, 'sine', 0.08);
+            speak(String(manual.count), true);
+        }
+
+        function renderManual() {
+            const elapsed = manualElapsed();
+            if (manual.automatic && manual.startedAt !== null && manual.interval !== null && elapsed >= manual.nextAt) {
+                const completed = Math.floor((elapsed - manual.nextAt) / manual.interval) + 1;
+                manual.count += completed;
+                manual.nextAt += completed * manual.interval;
+                announceSeries();
+            }
+            const seconds = Math.floor(elapsed / 1000);
+            manualClock.textContent = [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60]
+                .map(value => String(value).padStart(2, '0')).join(':');
+            manualCount.textContent = manual.count;
+            document.getElementById('manualStartLabel').textContent = manual.startedAt !== null ? 'Pausar' : manual.elapsed > 0 ? 'Retomar' : 'Iniciar';
+            manualStart.title = manual.startedAt !== null ? 'Pausar cronómetro' : 'Iniciar cronómetro';
+            manualStart.querySelector('svg').setAttribute('data-lucide', manual.startedAt !== null ? 'pause' : 'play');
+            manualTap.disabled = (manual.startedAt === null && manual.elapsed > 0) || (manual.automatic && manual.interval !== null);
+            manualUndo.disabled = manual.count === 0;
+            const timing = document.getElementById('seriesTiming');
+            timing.hidden = !manual.automatic;
+            timing.textContent = manual.interval === null ? 'A medir a primeira série…' :
+                `Série: ${(manual.interval / 1000).toFixed(1)} s · Próxima: ${Math.max(0, (manual.nextAt - elapsed) / 1000).toFixed(1)} s`;
+        }
+
+        function pauseManual() {
+            if (manual.startedAt !== null) {
+                manual.elapsed += performance.now() - manual.startedAt;
+                manual.startedAt = null;
+            }
+            clearInterval(manual.timer);
+            manual.timer = null;
+            renderManual();
+            releaseWakeLock();
+            lucide.createIcons();
+        }
+
+        function startManual() {
+            if (manual.startedAt !== null) return;
+            initAudioContext();
+            initSpeech();
+            manual.startedAt = performance.now();
+            manual.timer = setInterval(renderManual, 100);
+            requestWakeLock();
+            renderManual();
+            lucide.createIcons();
+        }
+
+        manualTap.addEventListener('click', () => {
+            if (manualTap.disabled) return;
+            if (manual.startedAt === null) startManual();
+            if (manual.automatic) {
+                const duration = manualElapsed() - manual.calibrationStart;
+                if (duration < 500) return;
+                manual.interval = duration;
+                manual.nextAt = manualElapsed() + duration;
+            }
+            manual.count++;
+            renderManual();
+            announceSeries();
+        });
+        manualStart.addEventListener('click', () => manual.startedAt === null ? startManual() : pauseManual());
+        manualUndo.addEventListener('click', () => {
+            manual.count = Math.max(0, manual.count - 1);
+            renderManual();
+            if (manual.count > 0) announceSeries();
+        });
+        document.getElementById('manualReset').addEventListener('click', () => {
+            pauseManual();
+            manual.count = 0;
+            manual.elapsed = 0;
+            manual.interval = null;
+            manual.nextAt = null;
+            manual.calibrationStart = 0;
+            clearTimeout(speechTimer);
+            if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+            renderManual();
+        });
+        document.querySelectorAll('input[name="seriesMode"]').forEach(input => {
+            input.addEventListener('change', () => {
+                pauseManual();
+                manual.automatic = input.value === 'auto';
+                manual.interval = null;
+                manual.nextAt = null;
+                manual.calibrationStart = manualElapsed();
+                if (manual.automatic) startManual();
+                else renderManual();
+            });
+        });
+        function selectMode(isManual) {
+            if (isManual && state.status !== 'IDLE' && state.status !== 'PAUSED' && state.status !== 'FINISHED') pauseWorkout();
+            if (!isManual) pauseManual();
+            document.getElementById('automaticPanel').hidden = isManual;
+            document.getElementById('manualPanel').hidden = !isManual;
+            ['automaticTab', 'manualTab'].forEach((id, index) => {
+                const tab = document.getElementById(id);
+                const selected = isManual === (index === 1);
+                tab.setAttribute('aria-selected', String(selected));
+                tab.tabIndex = selected ? 0 : -1;
+            });
+        }
+        document.getElementById('automaticTab').addEventListener('click', () => selectMode(false));
+        document.getElementById('manualTab').addEventListener('click', () => selectMode(true));
+        document.querySelector('.mode-tabs').addEventListener('keydown', event => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+            event.preventDefault();
+            const isManual = event.key === 'End' || (event.key !== 'Home' && document.getElementById('manualPanel').hidden);
+            selectMode(isManual);
+            document.getElementById(isManual ? 'manualTab' : 'automaticTab').focus();
+        });
+        initSpeech();
+        syncTempoFromBpm();
+    </script>
+</body>
+</html>
