@@ -3,9 +3,9 @@ export function buildCounter(){
  let html=fs.readFileSync('src/counter/source.html','utf8');
  html=html.replace(/<script\s+src="https:[^"]+"[^>]*><\/script>/g,'').replace(/<link[^>]+href="https:[^"]+"[^>]*>/g,'');
  const leadIn=fs.readFileSync('src/counter/lead-in.js','utf8');
- const celebration=fs.readFileSync('src/counter/celebration.js','utf8');
+ const celebration=fs.readFileSync('src/celebration.js','utf8').replace(/^export /gm,'')+'\n'+fs.readFileSync('src/counter/celebration.js','utf8');
  const automaticGoal=fs.readFileSync('src/counter/automatic-goal.js','utf8').replace(/^export /gm,'');
- const css=fs.readFileSync('src/counter/local.css','utf8'),icons=fs.readFileSync('src/counter/icons.js','utf8'),bridge=fs.readFileSync('src/counter/bridge.js','utf8'),progress=fs.readFileSync('src/counter/progress.js','utf8').replace(/^export /gm,'');
+ const css=fs.readFileSync('src/counter/local.css','utf8')+'\n'+fs.readFileSync('src/celebration.css','utf8'),icons=fs.readFileSync('src/counter/icons.js','utf8'),bridge=fs.readFileSync('src/counter/bridge.js','utf8'),progress=fs.readFileSync('src/counter/progress.js','utf8').replace(/^export /gm,'');
  html=html.replace('</head>',`<style>${css}</style><script>${icons}\n${progress}\n${automaticGoal}\n${celebration}\n${leadIn}</script></head>`);
  html=html.replace(/<body([^>]*)>/,'<body$1><p id="integration-notice" role="status"></p>');
  html=html.replace('</body>',`${fs.readFileSync('src/counter/celebration.html','utf8')}<script>${bridge}\n${fs.readFileSync('src/counter/data.js','utf8')}\ninstallFitTempoCelebration();</script></body>`);

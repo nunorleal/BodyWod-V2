@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {exercises,byId} from '../src/exercises.js';
-import {sequencePhase,orderSequencePhases,sequenceSections,formatSequenceDuration,sequencePaceTest,sequenceDefaults,applySequenceDefaults,isSequencePaceVerified,setSequenceCadence,confirmSequencePace,parseSequenceSeconds,sequenceCategories,sequenceCategory,newSequence,sequenceItem,emptySequences,sequenceTimeline,measuredCadence,validateSequences,SequenceRunner} from '../src/sequences.js';
+import {moveSequenceItem,sequenceUpcoming,sequenceRestExercise,sequenceExercises,sequenceById,isSequenceRest,sequencePhase,orderSequencePhases,sequenceSections,formatSequenceDuration,sequencePaceTest,sequenceDefaults,applySequenceDefaults,isSequencePaceVerified,setSequenceCadence,confirmSequencePace,parseSequenceSeconds,sequenceCategories,sequenceCategory,newSequence,sequenceItem,emptySequences,sequenceTimeline,measuredCadence,validateSequences,SequenceRunner} from '../src/sequences.js';
 import {emptyState,createStore} from '../src/storage.js';
 import {makeBackup,parseBackup,mergeBackup} from '../src/backup.js';
 function fixture(){const p=newSequence();p.items=[{...sequenceItem('ex-1-01'),sets:2,reps:15,rest:10},{...sequenceItem('ex-6-01'),sets:1,reps:10,rest:30}];return p}
@@ -103,4 +103,120 @@ test('section totals include series rests and transitions and add exactly to the
 test('empty sections stay visible at zero and recalculation follows exercise timing edits',()=>{
  const plan=newSequence();assert.deepEqual(sequenceSections(plan).map(s=>s.duration),[0,0,0]);plan.items=[{...sequenceItem('ex-1-01'),sets:2,reps:10,rest:5}];
  assert.deepEqual(sequenceSections(plan,{'ex-1-01':1.33}).map(s=>s.duration),[0,31.6,0]);plan.items[0].reps=15;assert.equal(sequenceSections(plan,{'ex-1-01':1.33})[1].duration,44.9);assert.equal(formatSequenceDuration(44.9),'00:44,90');assert.equal(formatSequenceDuration(60),'01:00');
+});
+
+test('a standalone rest is a timed one-off pause and ignores general repetition and series defaults',()=>{
+ const rest=sequenceItem(sequenceRestExercise.id,{sets:10,reps:100});
+ assert.equal(rest.mode,'time');assert.equal(rest.sets,1);assert.equal(rest.seconds,60);assert.equal(rest.rest,0);assert.equal(isSequenceRest(rest),true);
+ assert.ok(sequenceExercises.includes(sequenceRestExercise));assert.equal(sequenceById[rest.exerciseId].name,'Descanso');assert.equal(byId[rest.exerciseId],undefined,'Crossfit generator catalogue stays unchanged');
+ assert.equal(sequenceCategory(sequenceRestExercise,'Descanso'),true);
+ const plan=newSequence();plan.items=[rest];assert.equal(applySequenceDefaults(plan,{sets:8,reps:20}).items[0].sets,1);
+ for(const invalid of [{mode:'reps'},{sets:2},{rest:10},{phase:'unknown'}]){
+  const data=emptySequences();data.draft.items=[{...rest,...invalid}];assert.throws(()=>validateSequences(data));
+ }
+});
+test('inserted rest replaces the preceding automatic transition rest but keeps rest between series',()=>{
+ const plan=newSequence();plan.items=[{...sequenceItem('ex-1-01'),sets:2,reps:2,rest:15},{...sequenceItem(sequenceRestExercise.id),seconds:45.5},{...sequenceItem('ex-6-01'),sets:1,reps:1,rest:15}];
+ const steps=sequenceTimeline(plan,{'ex-1-01':2,'ex-6-01':4});
+ assert.deepEqual(steps.map(s=>[s.kind,s.duration]),[['work',4],['rest',15],['work',4],['rest',45.5],['work',4]]);
+ assert.equal(steps.at(-1).end,72.5);assert.equal(steps[3].exerciseId,sequenceRestExercise.id);
+});
+test('a rest inserted after warmup remains in that phase and may end the sequence',()=>{
+ const warm=exercises.find(e=>e.category==='Aquecimento'),plan=newSequence();
+ plan.items=[{...sequenceItem(warm.id),sets:1,seconds:20,rest:15},{...sequenceItem(sequenceRestExercise.id),phase:'warmup',seconds:30}];
+ const sections=sequenceSections(plan);assert.equal(sections[0].items.length,2);assert.equal(sections[0].duration,50);
+ assert.equal(sequenceTimeline(plan).at(-1).kind,'rest');
+});
+test('standalone timed rests survive full app backup export and import',()=>{
+ const state=emptyState();state.fittempoSequences=emptySequences();state.fittempoSequences.draft.items=[{...sequenceItem(sequenceRestExercise.id),seconds:90.25}];
+ const backup=parseBackup(JSON.stringify(makeBackup(state)));
+ const restored=mergeBackup(emptyState(),backup);
+ assert.equal(restored.fittempoSequences.draft.items[0].seconds,90.25);
+ assert.equal(sequenceTimeline(restored.fittempoSequences.draft).at(-1).end,90.25);
+});
+
+test('upcoming preview names the following exercise from the first rep even with ten current sets',()=>{
+ const plan=newSequence();plan.items=[{...sequenceItem('ex-1-01'),sets:10,reps:10,rest:15},{...sequenceItem('ex-6-01'),sets:2,reps:12,rest:0}];
+ const steps=sequenceTimeline(plan),first=sequenceUpcoming(steps,0);
+ assert.equal(first.exercise.exerciseId,'ex-6-01');assert.equal(first.exercise.reps,12);assert.equal(first.exercise.sets,2);
+ assert.equal(first.series.round,2);assert.equal(first.stage.kind,'rest');
+ const last=sequenceUpcoming(steps,steps.length-1);assert.equal(last.exercise,null);assert.equal(last.series,null);assert.equal(last.stage,null);
+});
+test('upcoming preview crosses explicit pauses and treats repeated exercise items as separate movements',()=>{
+ const plan=newSequence();plan.items=[{...sequenceItem('ex-1-01'),sets:1,rest:0},sequenceItem(sequenceRestExercise.id),{...sequenceItem('ex-1-01'),sets:1,rest:0}];
+ const steps=sequenceTimeline(plan),first=sequenceUpcoming(steps,0),rest=sequenceUpcoming(steps,1);
+ assert.equal(first.stage.kind,'rest');assert.equal(first.exercise.itemId,plan.items[2].id);assert.equal(first.series,null);assert.equal(rest.exercise.itemId,plan.items[2].id);
+});
+
+function retimingFixture(){const plan=newSequence();plan.items=[{...sequenceItem('ex-1-01'),sets:2,reps:10,rest:5},{...sequenceItem('ex-6-01'),sets:1,reps:2,rest:0}];return plan}
+test('speed changes preserve completed reps and elapsed time while retiming the unfinished part and later sets',()=>{
+ let now=0;const r=new SequenceRunner(retimingFixture(),{'ex-1-01':2,'ex-6-01':4},()=>now);r.prepare();r.begin();now=5000;
+ const before=r.snapshot();assert.equal(before.rep,2);assert.equal(before.total,58);
+ const after=r.retime(1);assert.equal(after.rep,2);assert.equal(after.elapsed,5);assert.equal(after.total,40.5);assert.equal(after.totalRemaining,35.5);
+ assert.deepEqual(r.steps[0].repTimes.slice(0,3),[2,4,5.5]);assert.equal(r.steps[2].duration,10);assert.equal(r.steps[1].duration,5);assert.equal(r.steps.at(-1).duration,8);
+ now=5499;assert.equal(r.snapshot().rep,2);now=5500;assert.equal(r.snapshot().rep,3);
+});
+test('slowing a paused exercise keeps it paused and preserves the fractional repetition on resume',()=>{
+ let now=0;const r=new SequenceRunner(retimingFixture(),{'ex-1-01':2,'ex-6-01':4},()=>now);r.prepare();r.begin();now=5000;r.pause();
+ const after=r.retime(3);assert.equal(after.running,false);assert.equal(after.elapsed,5);assert.equal(after.rep,2);assert.equal(r.steps[0].repTimes[2],6.5);
+ now=20000;assert.equal(r.snapshot().elapsed,5);r.prepare();r.begin();now=21500;assert.equal(r.snapshot().rep,3);
+});
+test('multiple pace changes survive pause, JSON recovery and whole-app backup without changing earlier work',()=>{
+ let now=0;const r=new SequenceRunner(retimingFixture(),{'ex-1-01':2,'ex-6-01':4},()=>now);r.prepare();r.begin();now=5000;r.retime(1);now=6500;r.retime(1.33);r.pause();
+ const json=JSON.parse(JSON.stringify(r.serialize())),copy=SequenceRunner.restore(json,()=>now);
+ assert.deepEqual(copy.steps,r.steps);assert.equal(copy.snapshot().rep,r.snapshot().rep);assert.equal(copy.snapshot().totalRemaining,r.snapshot().totalRemaining);
+ const state=emptyState();state.fittempoSequences=emptySequences();state.fittempoSequences.session=json;state.fittempoSequences.cadences={'ex-1-01':1.33};
+ const restored=mergeBackup(emptyState(),parseBackup(JSON.stringify(makeBackup(state))));assert.deepEqual(SequenceRunner.restore(restored.fittempoSequences.session,()=>now).steps,r.steps);
+});
+test('pace changes reject invalid values, rests, timed movements and corrupt replay records',()=>{
+ const r=new SequenceRunner(retimingFixture(),{'ex-1-01':2,'ex-6-01':4},()=>0);r.prepare();r.begin();
+ for(const value of [0,.2,60.1,1.333,NaN])assert.throws(()=>r.retime(value));
+ r.advance();assert.throws(()=>r.retime(1));
+ const json=r.serialize();json.paceChanges=[{index:0,elapsed:999,cadence:1}];assert.throws(()=>SequenceRunner.restore(json));
+});
+
+test('repeated speed adjustments preserve the same in-progress repetition fraction without accumulating drift',()=>{
+ let now=0;const r=new SequenceRunner(retimingFixture(),{'ex-1-01':2,'ex-6-01':4},()=>now);r.prepare();r.begin();now=5000;r.pause();
+ const originalTotal=r.snapshot().total;
+ for(let i=0;i<10;i++){r.retime(1);assert.equal(r.steps[0].repTimes[2],5.5);r.retime(2);assert.equal(r.steps[0].repTimes[2],6)}
+ assert.equal(r.snapshot().total,originalTotal);assert.equal(r.snapshot().rep,2);
+});
+
+test('drag reorder moves whole exercise cards before or after a target and keeps all settings',()=>{
+ const plan=retimingFixture();plan.items.push({...sequenceItem('ex-3-01'),sets:4,reps:7,rest:13});const original=structuredClone(plan);
+ const [a,b,c]=plan.items;
+ const moved=moveSequenceItem(plan,c.id,a.id,false);
+ assert.deepEqual(moved.items.map(item=>item.id),[c.id,a.id,b.id]);assert.deepEqual(moved.items[0],c);assert.deepEqual(plan,original);
+ assert.deepEqual(moveSequenceItem(moved,c.id,b.id,true).items.map(item=>item.id),[a.id,b.id,c.id]);
+ assert.deepEqual(moveSequenceItem(plan,a.id,a.id),plan);
+});
+test('drag order respects workout phases and changes only draft timing, including trailing rests',()=>{
+ const plan=fixture(),original=structuredClone(plan),cadences={'ex-1-01':1.33,'ex-6-01':5};
+ const before=sequenceTimeline(plan,cadences).at(-1).end,moved=moveSequenceItem(plan,plan.items[1].id,plan.items[0].id);
+ assert.ok(Math.abs(sequenceTimeline(moved,cadences).at(-1).end-before-20)<1e-8);assert.deepEqual(plan,original);
+ const warm=sequenceItem(exercises.find(e=>e.category==='Aquecimento').id);plan.items.unshift(warm);
+ assert.throws(()=>moveSequenceItem(plan,plan.items[2].id,warm.id),/mesma fase/);
+ assert.throws(()=>moveSequenceItem(plan,'missing',warm.id));
+});
+
+test('skip exercise omits all remaining sets and their automatic rests and recalculates the total',()=>{
+ let now=0;const r=new SequenceRunner(retimingFixture(),{'ex-1-01':2,'ex-6-01':4},()=>now);r.prepare();r.begin();now=5000;
+ const next=r.skip();assert.equal(next.step.exerciseId,'ex-6-01');assert.equal(next.index,4);assert.equal(next.elapsed,0);assert.equal(next.totalRemaining,8);assert.equal(next.total,13);assert.equal(next.running,false);assert.equal(r.skippedSeconds,45);assert.deepEqual(r.skippedItems,[r.plan.items[0].id]);
+});
+test('skip rest advances only the pause and keeps later sets, including explicit rest blocks',()=>{
+ let now=0;const r=new SequenceRunner(retimingFixture(),{'ex-1-01':2,'ex-6-01':4},()=>now);r.advance();r.prepare();r.begin();now=2000;
+ const next=r.skip();assert.equal(next.step.exerciseId,'ex-1-01');assert.equal(next.step.round,2);assert.equal(r.skippedSeconds,3);assert.deepEqual(r.skippedItems,[]);
+ const plan=retimingFixture();plan.items.splice(1,0,sequenceItem(sequenceRestExercise.id));const explicit=new SequenceRunner(plan,{},()=>0);assert.equal(explicit.skip().step.exerciseId,sequenceRestExercise.id);
+});
+test('skip on the last exercise finishes once and keeps only actual elapsed exercise time',()=>{
+ let now=0;const plan=newSequence();plan.items=[{...sequenceItem('ex-1-01'),sets:3,reps:10,rest:5}];const r=new SequenceRunner(plan,{'ex-1-01':2},()=>now);r.prepare();r.begin();now=5000;
+ const finished=r.skip();assert.equal(finished.finished,true);assert.equal(finished.totalRemaining,0);assert.equal(finished.total,5);assert.equal(finished.running,false);
+ assert.deepEqual(r.skip(),finished);
+});
+test('skip and pace changes survive whole-app backup and paused session recovery',()=>{
+ let now=0;const r=new SequenceRunner(retimingFixture(),{'ex-1-01':2,'ex-6-01':4},()=>now);r.prepare();r.begin();now=5000;r.retime(1);r.skip();r.prepare();r.begin();now=6000;r.retime(3);r.pause();
+ const state=emptyState();state.fittempoSequences=emptySequences();state.fittempoSequences.session=r.serialize();
+ const imported=mergeBackup(emptyState(),parseBackup(JSON.stringify(makeBackup(state)))),copy=SequenceRunner.restore(imported.fittempoSequences.session,()=>now);
+ assert.deepEqual(copy.steps,r.steps);assert.equal(copy.snapshot().total,r.snapshot().total);assert.equal(copy.snapshot().totalRemaining,r.snapshot().totalRemaining);assert.deepEqual(copy.skippedItems,r.skippedItems);
+ const corrupt=r.serialize();corrupt.skippedSeconds=999999;assert.throws(()=>SequenceRunner.restore(corrupt));
 });

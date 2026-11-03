@@ -1,3 +1,4 @@
+import {createWorkoutCelebration} from './celebration.js';
 import {createSequenceUI} from './sequence-ui.js';
 import {prepareSessionPlan,applySavedCadences,retimeExercisePlan,boundedCadence,MIN_CADENCE,MAX_CADENCE} from './pace.js';
 import {makeBackup,parseBackup,mergeBackup,mergeFitTempo,validateFitTempo} from './backup.js';
@@ -123,7 +124,7 @@ async function startSession(recover=false){
 }
 function finishSession(status){cancelAnimationFrame(frame);clock.pause();audio.stop();releaseWake();const snap=clock.getSnapshot();summary={id:crypto.randomUUID(),date:new Date().toISOString(),plan:structuredClone(clock.plan),actualSeconds:Math.round(clock.activeElapsed),timelineSeconds:Math.round(snap.elapsed),status,completedSteps:[...clock.completedSteps],completedReps:structuredClone(clock.completedReps),rounds:structuredClone(clock.rounds),changes:structuredClone(clock.changes),rating:0,notes:''};
  if(!save(s=>{s.history.unshift(summary);s.session=null})){openModal(`${modalHead('Não foi possível guardar')}<p class="small">O resumo continua em memória. Exporta os dados antes de fechar a aplicação.</p>${btn('backupHome','Ir ao início para exportar','primary full')}`)}
- rating=0;page='summary';render();if(status==='completed'){audio.unlock().then(()=>audio.beep('finish'));setTimeout(()=>audio.speak('Treino concluído. Muito bem! Reserva um momento para recuperar.'),850)}
+ rating=0;page='summary';render();if(status==='completed'){celebrateWorkout(`${summary.plan.name} · ${formatTime(summary.actualSeconds)}`);audio.unlock().then(()=>audio.beep('finish'));setTimeout(()=>audio.speak('Treino concluído. Muito bem! Reserva um momento para recuperar.'),850)}
 }
 function summaryPage(){if(!summary)return home();return `${header()}<div class="success-ring">${icon('check')}</div><div class="center"><div class="eyebrow">MAIS UM PASSO DADO</div><h1>${summary.status==='completed'?'O esforço é teu.<br>A conquista também.':'Por hoje, está feito.'}</h1><p class="sub">${escape(summary.plan.name)}</p></div><div class="stats"><div class="stat"><strong>${formatTime(summary.actualSeconds)}</strong><span>tempo ativo</span></div><div class="stat"><strong>${formatTime(summary.plan.duration)}</strong><span>programados</span></div><div class="stat"><strong>${summary.completedSteps.filter(id=>summary.plan.timeline.find(t=>t.id===id)?.kind==='work').length}</strong><span>séries concluídas</span></div></div><div class="callout">${summary.status==='completed'?'Sessão concluída':'Sessão terminada antecipadamente'} · guardada no histórico. ${summary.changes.length?summary.changes.length+' alterações registadas.':''}</div><form id="summary-form"><div class="field"><label for="summary-name">Dá um nome a este treino</label><input id="summary-name" name="name" value="${escape(summary.plan.name)}" maxlength="80" required></div><div class="field"><label>Como correu?</label><div class="stars" role="group" aria-label="Classificação de 1 a 5">${[1,2,3,4,5].map(n=>btn('rate','★',n<=rating?'on':'',`type="button" data-value="${n}" aria-label="${n} estrelas" aria-pressed="${n<=rating}"`)).join('')}</div></div><div class="field"><label for="summary-notes">Notas da sessão</label><textarea name="notes" id="summary-notes" placeholder="Como te sentiste? O que queres melhorar?" maxlength="2000"></textarea></div><label class="toggle"><span>Marcar como favorito</span><input type="checkbox" name="favorite"></label><button class="primary full" style="margin-top:22px">Guardar treino e avaliação ${icon('heart')}</button></form>${btn('navigate','Voltar ao início','secondary full','style="margin-top:10px" data-page="home"')}`}
 function persistPlan(){save(s=>{s.lastPlan=plan})}
@@ -206,7 +207,8 @@ document.addEventListener('visibilitychange',()=>{if(page!=='active')return;if(d
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e});
 if('serviceWorker' in navigator&&location.protocol!=='file:')navigator.serviceWorker.register('./sw.js').catch(()=>{});
 window.addEventListener('online',()=>toast('Ligação restabelecida. Os teus dados continuam no dispositivo.'));
-const sequenceUI=createSequenceUI({store,save,toast,showExercise:showDetails});
+const celebrateWorkout=createWorkoutCelebration();
+const sequenceUI=createSequenceUI({store,save,toast,showExercise:showDetails,onComplete:record=>celebrateWorkout(`${record.plan.name} · ${formatTime(record.duration)}`)});
 render();
 
 async function currentCounterData(){

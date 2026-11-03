@@ -107,3 +107,14 @@ test('the start cue starts the sequence clock on native voice start, without wai
  now(4250);assert.equal(clock.elapsed,.25,'clock runs while the start cue is still speaking');
  spoken[0].onstart();assert.equal(starts,1);spoken[0].onend();assert.equal(starts,1);
 }));
+
+test('an initially empty native voice list still requests Portuguese speech and picks up voices on the next cue',()=>harness(({coach,spoken})=>{
+ globalThis.speechSynthesis.getVoices=()=>[];
+ assert.equal(coach.speak('Começa.'),true);
+ assert.equal(spoken[0].lang,'pt-PT');assert.equal(spoken[0].voice,undefined);
+ spoken[0].onstart();spoken[0].onend();
+ const portuguese={name:'Joana',voiceURI:'joana',lang:'pt-PT',localService:true};
+ globalThis.speechSynthesis.getVoices=()=>[portuguese];
+ assert.equal(coach.speak('um',{priority:'count'}),true);
+ assert.equal(spoken[1].voice,portuguese);
+}));

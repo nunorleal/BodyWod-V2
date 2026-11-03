@@ -18,21 +18,24 @@ export class CoachAudio {
  get voice(){const p=this.preferences();return this.voices.find(v=>v.voiceURI===p.voiceURI)||this.voices.find(v=>v.localService)||this.voices[0]}
  resetCue(){this.stepKey=null;this.lastSecond=null;this.lastRep=0;this.lastElapsed=-1;this.switchedSide=false;this.clusterRest=null}
  async unlock(){
- this.error='';const Audio=globalThis.AudioContext||globalThis.webkitAudioContext;
+ this.error='';globalThis.speechSynthesis?.resume?.();this.refreshVoices();const Audio=globalThis.AudioContext||globalThis.webkitAudioContext;
  try{if(!Audio)throw Error('Este navegador não disponibiliza áudio para os bips.');if(!this.context||this.context.state==='closed'){this.context=new Audio();this.context.addEventListener?.('statechange',()=>this.notify())}await this.context.resume();if(this.context.state!=='running')this.error='Som bloqueado pelo navegador. Toca em «Testar som» para o ativar.';globalThis.speechSynthesis?.resume?.()}catch(err){this.error=err.message||'Não foi possível ativar o áudio.'}
  this.refreshVoices();return this.context?.state==='running';
  }
  stop(){for(const u of [...this.utterances])u.finish?.(false);this.endNarration?.();globalThis.speechSynthesis?.cancel();for(const node of this.activeNodes){try{node.stop();node.disconnect()}catch{}}this.activeNodes.clear();if(this.context?.state==='running')this.context.suspend().catch(()=>{});this.notify()}
  speak(text,{priority='instruction',hold=false,after=null,onStart=null}={}){
- const p=this.preferences();if(!p.voice||!this.voice||!globalThis.SpeechSynthesisUtterance)return false;
- const synth=globalThis.speechSynthesis;
+ const p=this.preferences(),synth=globalThis.speechSynthesis;
+ if(!p.voice||!synth||!globalThis.SpeechSynthesisUtterance)return false;
+ // Voice lists can still be empty on Safari's first tap. Let the native engine
+ // resolve pt-PT instead of silently skipping the whole instruction.
+ this.refreshVoices();
  try{
  // Keep native utterances alive until completion, and never accumulate stale counts.
  const notification=priority==='notification';
  const replace=notification?this.utterances.size>0:priority!=='count'||this.utterances.size>0;
  for(const u of [...this.utterances])u.finish?.(false);
  if(replace)synth.cancel();synth.resume?.();
- const u=new SpeechSynthesisUtterance(speechPronunciation(text));u.lang='pt-PT';u.voice=this.voice;u.volume=Number(p.voiceVolume);u.rate=priority==='count'?1.08:1.1;
+ const u=new SpeechSynthesisUtterance(speechPronunciation(text));u.lang='pt-PT';if(this.voice)u.voice=this.voice;u.volume=Number(p.voiceVolume);u.rate=priority==='count'?1.08:1.1;
  this.utterances.add(u);
  const release=hold?(this.onNarration()||(()=>{})):(()=>{});if(hold)this.narrationPending=true;
  let done=false,started=false,timer,poll;
