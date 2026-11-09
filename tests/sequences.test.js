@@ -220,3 +220,21 @@ test('skip and pace changes survive whole-app backup and paused session recovery
  assert.deepEqual(copy.steps,r.steps);assert.equal(copy.snapshot().total,r.snapshot().total);assert.equal(copy.snapshot().totalRemaining,r.snapshot().totalRemaining);assert.deepEqual(copy.skippedItems,r.skippedItems);
  const corrupt=r.serialize();corrupt.skippedSeconds=999999;assert.throws(()=>SequenceRunner.restore(corrupt));
 });
+
+test('progress markers mark exercises once and include the time of intervening rests',()=>{
+ const plan=newSequence();
+ plan.items=[{...sequenceItem('ex-1-01'),sets:2,reps:5,rest:5},{...sequenceItem(sequenceRestExercise.id),seconds:10},{...sequenceItem('ex-6-01'),sets:1,reps:3,rest:0}];
+ const r=new SequenceRunner(plan,{'ex-1-01':2,'ex-6-01':5},()=>0);
+ assert.deepEqual(r.exerciseMarkers(),[{exerciseId:'ex-6-01',seconds:35,percent:70}]);
+ r.retime(1);
+ assert.deepEqual(r.exerciseMarkers(),[{exerciseId:'ex-6-01',seconds:25,percent:62.5}]);
+});
+test('progress markers omit a wholly skipped exercise and keep the real starts after recovery',()=>{
+ const plan=newSequence();
+ plan.items=['ex-1-01','ex-6-01','ex-3-01','ex-1-01'].map(id=>({...sequenceItem(id),sets:1,reps:5,rest:0}));
+ const r=new SequenceRunner(plan,{'ex-1-01':2,'ex-6-01':2,'ex-3-01':2},()=>0);
+ r.advance();r.skip();
+ const markers=r.exerciseMarkers();
+ assert.deepEqual(markers.map(m=>[m.exerciseId,m.seconds]),[['ex-3-01',10],['ex-1-01',20]]);
+ assert.deepEqual(SequenceRunner.restore(JSON.parse(JSON.stringify(r.serialize()))).exerciseMarkers(),markers);
+});

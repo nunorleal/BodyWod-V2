@@ -109,7 +109,7 @@ function retimeSequenceStep(steps,index,elapsed,cadence){
  return current.exerciseId;
 }
 export class SequenceRunner{
- constructor(plan,cadences={},now=()=>performance.now()) {this.plan=structuredClone(plan);this.cadences=structuredClone(cadences);this.initialCadences=structuredClone(cadences);this.paceChanges=[];this.skippedSeconds=0;this.skippedItems=[];this.steps=sequenceTimeline(plan,cadences);this.now=now;this.index=0;this.offset=0;this.anchor=0;this.running=false;this.waiting=false;this.finished=false}
+ constructor(plan,cadences={},now=()=>performance.now()) {this.plan=structuredClone(plan);this.cadences=structuredClone(cadences);this.initialCadences=structuredClone(cadences);this.paceChanges=[];this.skippedSeconds=0;this.skippedItems=[];this.skipSpans=[];this.steps=sequenceTimeline(plan,cadences);this.now=now;this.index=0;this.offset=0;this.anchor=0;this.running=false;this.waiting=false;this.finished=false}
  snapshot(){const step=this.steps[this.index],rawElapsed=Math.min(step.duration,this.offset+(this.running&&!this.waiting?(this.now()-this.anchor)/1000:0)),elapsed=rawElapsed>=step.duration-1e-6?step.duration:rawElapsed;return {step,index:this.index,elapsed,rep:step.kind==='work'&&step.reps?Math.min(step.reps,step.repTimes?step.repTimes.filter(at=>elapsed+1e-6>=at).length:Math.floor((elapsed+1e-6)/step.cadence)):0,remaining:Math.max(0,step.duration-elapsed),total:Math.max(0,this.steps.at(-1).end-this.skippedSeconds),totalRemaining:this.finished?0:Math.max(0,Math.round((this.steps.at(-1).end-step.start-elapsed)*1e6)/1e6),done:elapsed>=step.duration,running:this.running,waiting:this.waiting,finished:this.finished}}
  prepare(){if(this.finished)return;this.offset=this.snapshot().elapsed;this.running=true;this.waiting=true}
  begin(){if(!this.running||!this.waiting)return;this.waiting=false;this.anchor=this.now()}
@@ -119,7 +119,9 @@ export class SequenceRunner{
   if(this.finished)return this.snapshot();
   const s=this.snapshot(),next=s.step.kind==='rest'?this.index+1:this.steps.findIndex((step,index)=>index>this.index&&step.itemId!==s.step.itemId);
   const to=next<0?this.steps.length:next,targetStart=this.steps[to]?.start??this.steps.at(-1).end;
-  this.pause();this.skippedSeconds+=Math.max(0,targetStart-s.step.start-s.elapsed);
+  this.pause();
+  const seconds=Math.max(0,targetStart-s.step.start-s.elapsed);
+  if(seconds>0){this.skippedSeconds+=seconds;this.skipSpans.push({from:this.index,to,seconds})}
   if((s.step.kind==='work'||isSequenceRest(s.step))&&!this.skippedItems.includes(s.step.itemId))this.skippedItems.push(s.step.itemId);
   if(to>=this.steps.length){this.finished=true;return this.snapshot()}
   this.index=to;this.offset=0;return this.snapshot();
@@ -129,12 +131,37 @@ export class SequenceRunner{
   const elapsed=this.snapshot().elapsed,exerciseId=retimeSequenceStep(this.steps,this.index,elapsed,cadence);
   this.cadences[exerciseId]=cadence;this.paceChanges.push({index:this.index,elapsed,cadence});this.offset=elapsed;this.anchor=this.now();return this.snapshot();
  }
- serialize(){return {plan:this.plan,cadences:this.initialCadences,index:this.index,offset:this.snapshot().elapsed,...(this.paceChanges.length?{paceChanges:structuredClone(this.paceChanges)}:{}),...(this.skippedSeconds||this.skippedItems.length?{skippedSeconds:this.skippedSeconds,skippedItems:[...this.skippedItems]}:{})}}
+ exerciseMarkers(){
+  const total=this.steps.at(-1).end-this.skippedSeconds;
+  if(total<=0)return [];
+  // Older checkpoints kept the skipped duration without its location.
+  const unlocated=Math.max(0,this.skippedSeconds-this.skipSpans.reduce((sum,span)=>sum+span.seconds,0));
+  const markers=[];let removed=unlocated,cursor=0;
+  for(const [index,step] of this.steps.entries()){
+   while(this.skipSpans[cursor]?.to<=index)removed+=this.skipSpans[cursor++].seconds;
+   if(step.kind!=='work'||step.round!==1||(unlocated>1e-6&&index<this.index))continue;
+   const span=this.skipSpans[cursor];
+   if(span&&index<span.to&&(index>span.from||(index===span.from&&((this.steps[span.to]?.start??this.steps.at(-1).end)-step.start-span.seconds)<=1e-6)))continue;
+   const seconds=step.start-removed;
+   if(seconds>1e-6&&seconds<total-1e-6)markers.push({exerciseId:step.exerciseId,seconds,percent:seconds/total*100});
+  }
+  return markers;
+ }
+ serialize(){return {plan:this.plan,cadences:this.initialCadences,index:this.index,offset:this.snapshot().elapsed,...(this.paceChanges.length?{paceChanges:structuredClone(this.paceChanges)}:{}),...(this.skippedSeconds||this.skippedItems.length?{skippedSeconds:this.skippedSeconds,skippedItems:[...this.skippedItems]}:{}),...(this.skipSpans.length?{skipSpans:this.skipSpans.map(span=>({...span}))}:{})}}
  static restore(data,now){const runner=new SequenceRunner(data.plan,data.cadences,now),changes=data.paceChanges||[];
  if(!Array.isArray(changes)||changes.length>1000)throw Error('Ajustes de ritmo inválidos.');
  let previous=null;for(const change of changes){if(!change||!integer(change.index,0,runner.steps.length-1)||change.index>data.index||(previous&&(change.index<previous.index||(change.index===previous.index&&change.elapsed<previous.elapsed))))throw Error('Ajustes de ritmo inválidos.');const id=retimeSequenceStep(runner.steps,change.index,change.elapsed,change.cadence);runner.cadences[id]=change.cadence;runner.paceChanges.push({...change});previous=change}
  if(!integer(data.index,0,runner.steps.length-1)||!Number.isFinite(data.offset)||data.offset<0||data.offset>runner.steps[data.index].duration||(previous&&previous.index===data.index&&data.offset<previous.elapsed))throw Error('Sessão inválida.');runner.index=data.index;runner.offset=data.offset;
  const skipped=data.skippedSeconds??0,items=data.skippedItems??[];
  if(!Number.isFinite(skipped)||skipped<0||skipped>runner.steps[data.index].start+data.offset+1e-6||!Array.isArray(items)||items.length>runner.plan.items.length||new Set(items).size!==items.length||items.some(id=>!runner.plan.items.some(item=>item.id===id)))throw Error('Exercícios saltados inválidos.');
+ const spans=data.skipSpans??[];
+ if(!Array.isArray(spans)||spans.length>data.index)throw Error('Saltos da sequência inválidos.');
+ let removed=0,previousEnd=0;
+ for(const span of spans){
+  if(!span||!integer(span.from,previousEnd,data.index-1)||!integer(span.to,span.from+1,data.index)||!Number.isFinite(span.seconds)||span.seconds<=0||span.seconds>runner.steps[span.to].start-runner.steps[span.from].start+1e-6)throw Error('Saltos da sequência inválidos.');
+  removed+=span.seconds;previousEnd=span.to;
+  runner.skipSpans.push({from:span.from,to:span.to,seconds:span.seconds});
+ }
+ if(removed>skipped+1e-6)throw Error('Saltos da sequência inválidos.');
  runner.skippedSeconds=skipped;runner.skippedItems=[...items];return runner}
 }

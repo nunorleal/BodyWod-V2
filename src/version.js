@@ -1,2 +1,2 @@
 // Incrementar uma vez por alteração entregue: 1.01, 1.02, ...
-export const APP_VERSION='1.50';
+export const APP_VERSION='1.51';
