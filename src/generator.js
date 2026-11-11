@@ -112,13 +112,13 @@ function paceCapacity(item,level){
 }
 export function editItem(plan,blockId,itemId,patch){const copy=structuredClone(plan),b=copy.blocks.find(b=>b.id===blockId),i=b?.items.find(i=>i.id===itemId);if(!i)throw Error('Exercício não encontrado.');
  if(patch.exercise&&patch.exercise.id!==i.exercise.id){const allowed=alternatives(i.exercise,{...copy.config,phase:b.type},copy.config.excluded||[]);if(!allowed.some(e=>e.id===patch.exercise.id))throw Error('Substituição incompatível.');}
- const changedExercise=patch.exercise&&patch.exercise.id!==i.exercise.id;const explicitReps=Object.hasOwn(patch,'reps')&&patch.reps!==i.reps;Object.assign(i,patch);if(changedExercise)delete i.cadenceCustom;if(explicitReps){i.repsMode='manual';const profile=repetitionTarget(i.exercise,i.work,copy.config.level);if(!i.cadenceCustom){i.cluster=profile.cluster;i.cadence=profile.cadence;}}else if(i.repsMode==='auto'&&b.format!=='amrap')Object.assign(i,repetitionTarget(i.exercise,i.work,copy.config.level));if(i.exercise.execution==='isometry')i.reps=null;if(!Number.isInteger(i.sets)||i.sets<1||i.sets>8||!(copy.customPacing?Number.isFinite(i.work):Number.isInteger(i.work))||i.work<(copy.customPacing?1:15)||i.work>(copy.customPacing?1200:copy.config.level===3?120:90)||!Number.isInteger(i.rest)||i.rest<0||i.rest>60||i.reps!==null&&(!Number.isInteger(i.reps)||i.reps<1||i.reps>(copy.config.level===3?90:60)))throw Error(`Usa 1–8 séries, 15–${copy.config.level===3?120:90}s de execução, 0–60s de descanso e 1–${copy.config.level===3?90:60} repetições.`);
+ const changedExercise=patch.exercise&&patch.exercise.id!==i.exercise.id;const explicitReps=Object.hasOwn(patch,'reps')&&patch.reps!==i.reps;Object.assign(i,patch);if(changedExercise){delete i.cadenceCustom;delete i.repsPinned}if(explicitReps){i.repsMode='manual';i.repsPinned=true;const profile=repetitionTarget(i.exercise,i.work,copy.config.level);if(!i.cadenceCustom){i.cluster=profile.cluster;i.cadence=profile.cadence;}}else if(i.repsMode==='auto'&&b.format!=='amrap')Object.assign(i,repetitionTarget(i.exercise,i.work,copy.config.level));if(i.exercise.execution==='isometry')i.reps=null;if(!Number.isInteger(i.sets)||i.sets<1||i.sets>8||!(copy.customPacing?Number.isFinite(i.work):Number.isInteger(i.work))||i.work<(copy.customPacing?1:15)||i.work>(copy.customPacing?1200:copy.config.level===3?120:90)||!Number.isInteger(i.rest)||i.rest<0||i.rest>60||i.reps!==null&&(!Number.isInteger(i.reps)||i.reps<1||i.reps>(copy.config.level===3?90:60)))throw Error(`Usa 1–8 séries, 15–${copy.config.level===3?120:90}s de execução, 0–60s de descanso e 1–${copy.config.level===3?90:60} repetições.`);
  if(i.reps&&b.format!=='amrap'&&i.reps>paceCapacity(i,copy.config.level))throw Error('Estas repetições não cabem no tempo com a cadência e as pausas previstas. Aumenta o tempo ou reduz as repetições.');
  if(b.format==='emom'){if(i.work>55)throw Error('EMOM: no máximo 55s de execução.');i.rest=60-i.work;b.tail=b.target-b.items.reduce((s,x)=>s+x.sets*60,0);if(b.tail<0)throw Error('As séries excedem o bloco EMOM.');}
  else if(b.format!=='amrap'){
  const locked=i.locked;i.locked=true;distribute(b);i.locked=locked;
  }
- for(const item of b.items)if(item.id!==i.id&&item.reps&&b.format!=='amrap'){if(item.repsMode==='auto')Object.assign(item,repetitionTarget(item.exercise,item.work,copy.config.level));else item.reps=Math.max(1,Math.min(item.reps,paceCapacity(item,copy.config.level)));}
+ for(const item of b.items)if(item.id!==i.id&&item.reps&&b.format!=='amrap'){if(item.repsMode==='auto')Object.assign(item,repetitionTarget(item.exercise,item.work,copy.config.level));else if(item.repsPinned){if(item.reps>paceCapacity(item,copy.config.level))throw Error('A alteração deixa outro exercício sem tempo para as repetições escolhidas. Ajusta o tempo de execução.')}else item.reps=Math.max(1,Math.min(item.reps,paceCapacity(item,copy.config.level)));}
  return rebuild(copy);
 }
 export function regenerateBlock(plan,blockId,state,seed=Date.now()){
@@ -152,10 +152,20 @@ export function updateRepetitionTargets(plan,{from=0}={}){
  if(!plan)return plan;
  const copy=structuredClone(plan);
  for(const b of copy.blocks)if(b.type==='main'&&b.format!=='amrap')for(const item of b.items){
-  if(item.exercise.execution!=='reps'||item.cadenceCustom)continue;
+  if(item.exercise.execution!=='reps'||item.cadenceCustom||item.repsPinned)continue;
   const pending=copy.timeline.filter(s=>s.itemId===item.id&&s.kind==='work'&&s.start>=from);
   if(!pending.length)continue;
-  const manual=item.repsMode==='manual',target=repetitionTarget(item.exercise,item.work,copy.config.level);
+  const manual=item.repsMode==='manual';
+  // Keep older manual entries too, when their saved cadence still fits.
+  if(manual&&pending.every(step=>{
+   if(step.reps!==item.reps)return false;
+   if(!step.reps)return true;
+   if(step.repTimes?.length===step.reps)return step.repTimes.at(-1)<=step.duration+1e-6;
+   if(!Number.isFinite(step.cadence)||step.cadence<=0)return false;
+   const capacity=step.cluster?clusterTarget(step.duration,{cadence:step.cadence,cluster:step.cluster,cap:90}):Math.max(1,Math.floor((step.duration-6)/step.cadence));
+   return step.reps<=capacity;
+  }))continue;
+  const target=repetitionTarget(item.exercise,item.work,copy.config.level);
   Object.assign(item,{...target,reps:manual?Math.min(item.reps,target.reps):target.reps,repsMode:manual?'manual':'auto'});
   for(const step of pending){const next=repetitionTarget(step.exercise,step.duration,copy.config.level);Object.assign(step,{...next,reps:manual?Math.min(step.reps,next.reps):next.reps});}
  }

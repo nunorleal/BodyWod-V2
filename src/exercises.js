@@ -988,6 +988,195 @@ export const exercises = [
     "harder": []
   },
   {
+    "id": "ex-2-31",
+    "name": "Agachamento abre e fecha",
+    "category": "Pernas e glúteos",
+    "primary": [
+      "Quadríceps",
+      "Glúteos"
+    ],
+    "secondary": [
+      "Core",
+      "Gémeos"
+    ],
+    "pattern": "agachar",
+    "difficulty": 2,
+    "execution": "reps",
+    "recommendedSeconds": 30,
+    "recommendedReps": 10,
+    "recommendedSets": 3,
+    "recommendedRest": 30,
+    "instructions": [
+      "Começa de pé, com os pés juntos. Afasta-os ao baixar para o agachamento.",
+      "Estica os braços e toca no chão com as duas mãos à frente dos pés, se a amplitude te permitir. Mantém os calcanhares apoiados.",
+      "Volta a subir e junta os pés. Podes abrir e fechar com passos, sem saltar. Cada ciclo conta uma repetição."
+    ],
+    "mistakes": [
+      "Deixar os joelhos cair para dentro.",
+      "Forçar a profundidade do agachamento ou perder o apoio dos pés."
+    ],
+    "impact": "low",
+    "unilateral": false,
+    "visual": {
+      "status": "pending-validation",
+      "start": null,
+      "end": null,
+      "animation": null,
+      "reviewer": null
+    },
+    "easier": [
+      "ex-2-01"
+    ],
+    "harder": [
+      "ex-2-03"
+    ],
+    "aliases": [
+      "Agachamento com abre e fecha",
+      "Agachamento com toque no chão"
+    ]
+  },
+  {
+    "id": "ex-2-32",
+    "name": "Agachamento com flexão da anca",
+    "category": "Pernas e glúteos",
+    "primary": [
+      "Quadríceps",
+      "Glúteos"
+    ],
+    "secondary": [
+      "Flexores da anca",
+      "Oblíquos"
+    ],
+    "pattern": "agachar",
+    "difficulty": 2,
+    "execution": "reps",
+    "recommendedSeconds": 30,
+    "recommendedReps": 10,
+    "recommendedSets": 3,
+    "recommendedRest": 30,
+    "instructions": [
+      "Agacha com os pés bem apoiados e os joelhos alinhados.",
+      "Ao subir, eleva um joelho e aproxima-o do cotovelo oposto, com controlo.",
+      "Volta a pousar o pé antes de agachar novamente. Alterna o lado a cada repetição."
+    ],
+    "mistakes": [
+      "Deixar os joelhos cair para dentro.",
+      "Forçar a profundidade do agachamento ou perder o apoio dos pés.",
+      "Forçar o contacto entre o joelho e o cotovelo."
+    ],
+    "impact": "low",
+    "unilateral": false,
+    "visual": {
+      "status": "pending-validation",
+      "start": null,
+      "end": null,
+      "animation": null,
+      "reviewer": null
+    },
+    "easier": [
+      "ex-2-01"
+    ],
+    "harder": [],
+    "aliases": [
+      "Agachamento com flexão de anca",
+      "Agachamento com joelho ao cotovelo oposto"
+    ]
+  },
+  {
+    "id": "ex-2-33",
+    "name": "Agachamento com toque no pé",
+    "category": "Pernas e glúteos",
+    "primary": [
+      "Quadríceps",
+      "Glúteos"
+    ],
+    "secondary": [
+      "Flexores da anca",
+      "Core"
+    ],
+    "pattern": "agachar",
+    "difficulty": 2,
+    "execution": "reps",
+    "recommendedSeconds": 30,
+    "recommendedReps": 10,
+    "recommendedSets": 3,
+    "recommendedRest": 30,
+    "instructions": [
+      "Baixa para um agachamento com os pés apoiados.",
+      "Ao subir, faz um pontapé controlado à frente e aproxima a mão oposta do pé. Toca no pé se conseguires manter o equilíbrio.",
+      "Pousa o pé antes do próximo agachamento. Alterna a perna a cada repetição."
+    ],
+    "mistakes": [
+      "Deixar os joelhos cair para dentro.",
+      "Forçar a profundidade do agachamento ou perder o apoio dos pés.",
+      "Lançar a perna com força ou inclinar demasiado o tronco."
+    ],
+    "impact": "low",
+    "unilateral": false,
+    "visual": {
+      "status": "pending-validation",
+      "start": null,
+      "end": null,
+      "animation": null,
+      "reviewer": null
+    },
+    "easier": [
+      "ex-2-32"
+    ],
+    "harder": [],
+    "aliases": [
+      "Agachamento tocando no pé",
+      "Agachamento com pontapé na mão oposta"
+    ]
+  },
+  {
+    "id": "ex-2-34",
+    "name": "Agachamento com rotação da anca",
+    "category": "Pernas e glúteos",
+    "primary": [
+      "Quadríceps",
+      "Glúteos"
+    ],
+    "secondary": [
+      "Oblíquos",
+      "Core"
+    ],
+    "pattern": "agachar",
+    "difficulty": 2,
+    "execution": "reps",
+    "recommendedSeconds": 30,
+    "recommendedReps": 10,
+    "recommendedSets": 3,
+    "recommendedRest": 30,
+    "instructions": [
+      "Agacha e volta à posição de pé.",
+      "No fim da subida, roda a anca e o tronco para um lado. Deixa os pés acompanhar a rotação.",
+      "Volta ao centro antes de agachar outra vez. Alterna direita e esquerda a cada repetição."
+    ],
+    "mistakes": [
+      "Deixar os joelhos cair para dentro.",
+      "Forçar a profundidade do agachamento ou perder o apoio dos pés.",
+      "Rodar sobre o joelho com o pé preso ao chão."
+    ],
+    "impact": "low",
+    "unilateral": false,
+    "visual": {
+      "status": "pending-validation",
+      "start": null,
+      "end": null,
+      "animation": null,
+      "reviewer": null
+    },
+    "easier": [
+      "ex-2-01"
+    ],
+    "harder": [],
+    "aliases": [
+      "Agachamento com giro de torso",
+      "Agachamento com rotação do tronco"
+    ]
+  },
+  {
     "id": "ex-2-04",
     "name": "Agachamentos com pausa",
     "category": "Pernas e glúteos",
@@ -4998,8 +5187,8 @@ export const exercises = [
     "recommendedSets": 3,
     "recommendedRest": 30,
     "instructions": [
-      "Recua um pé de cada vez para prancha e volta a ficar de pé.",
-      "Mantém a respiração regular e usa uma amplitude que controles."
+      "Agacha, apoia as mãos no chão e recua um pé de cada vez até à prancha alta.",
+      "Sem fazer flexão, volta a avançar um pé de cada vez e fica de pé, sem salto."
     ],
     "mistakes": [
       "Prender a respiração.",
@@ -5021,6 +5210,11 @@ export const exercises = [
     "harder": [
       "ex-6-01",
       "ex-6-22"
+    ],
+    "aliases": [
+      "Sprawl",
+      "Spraw",
+      "Burpee sem salto e sem flexão"
     ]
   },
   {
@@ -5190,6 +5384,197 @@ export const exercises = [
     ]
   },
   {
+    "id": "ex-6-31",
+    "name": "Saltos militares abre e fecha",
+    "category": "Cardio e corpo inteiro",
+    "primary": [
+      "Gémeos",
+      "Deltoide anterior"
+    ],
+    "secondary": [
+      "Quadríceps",
+      "Core"
+    ],
+    "pattern": "cardio",
+    "difficulty": 2,
+    "execution": "reps",
+    "recommendedSeconds": 30,
+    "recommendedReps": 12,
+    "recommendedSets": 3,
+    "recommendedRest": 30,
+    "instructions": [
+      "Começa com os pés juntos e os braços ao lado do corpo.",
+      "No primeiro salto, afasta os pés e leva os braços pelos lados até acima da cabeça, como num salto militar normal.",
+      "No segundo salto, junta os pés e aproxima os braços esticados à frente. A partir daí, eleva-os acima da cabeça.",
+      "Baixa os braços para recomeçar. Os dois saltos juntos contam uma repetição."
+    ],
+    "mistakes": [
+      "Aterrar com os joelhos rígidos.",
+      "Acelerar à custa do controlo."
+    ],
+    "impact": "high",
+    "unilateral": false,
+    "visual": {
+      "status": "pending-validation",
+      "start": null,
+      "end": null,
+      "animation": null,
+      "reviewer": null
+    },
+    "easier": [
+      "ex-6-06",
+      "ex-6-07"
+    ],
+    "harder": [],
+    "aliases": [
+      "Polichinelo abre e fecha",
+      "Saltos de tesoura abre e fecha"
+    ]
+  },
+  {
+    "id": "ex-6-32",
+    "name": "Salto militar “polisapato”",
+    "category": "Cardio e corpo inteiro",
+    "primary": [
+      "Gémeos",
+      "Quadríceps"
+    ],
+    "secondary": [
+      "Glúteos",
+      "Deltoide anterior",
+      "Core"
+    ],
+    "pattern": "cardio",
+    "difficulty": 2,
+    "execution": "reps",
+    "recommendedSeconds": 30,
+    "recommendedReps": 12,
+    "recommendedSets": 3,
+    "recommendedRest": 30,
+    "instructions": [
+      "Salta com um pé para a frente e o outro para trás. Leva o braço oposto à perna da frente também para a frente.",
+      "No salto seguinte, troca os pés e os braços. O movimento é para a frente e para trás, sem abrir para os lados.",
+      "Uma troca para cada lado conta uma repetição."
+    ],
+    "mistakes": [
+      "Aterrar com os joelhos rígidos.",
+      "Acelerar à custa do controlo."
+    ],
+    "impact": "high",
+    "unilateral": false,
+    "visual": {
+      "status": "pending-validation",
+      "start": null,
+      "end": null,
+      "animation": null,
+      "reviewer": null
+    },
+    "easier": [
+      "ex-6-07"
+    ],
+    "harder": [],
+    "aliases": [
+      "Polisapato",
+      "Polichinelo frontal",
+      "Saltos militares à frente e atrás"
+    ]
+  },
+  {
+    "id": "ex-6-33",
+    "name": "Escalador com pé ao lado da mão",
+    "category": "Cardio e corpo inteiro",
+    "primary": [
+      "Flexores da anca",
+      "Abdominais"
+    ],
+    "secondary": [
+      "Glúteos",
+      "Deltoide anterior"
+    ],
+    "pattern": "global",
+    "difficulty": 2,
+    "execution": "reps",
+    "recommendedSeconds": 30,
+    "recommendedReps": 10,
+    "recommendedSets": 3,
+    "recommendedRest": 30,
+    "instructions": [
+      "Começa em prancha alta, com as mãos no chão.",
+      "Avança um pé e pousa-o junto à parte de fora da mão do mesmo lado. Mantém as mãos apoiadas.",
+      "Leva o pé de volta à prancha e repete com o outro. Cada avanço e regresso conta uma repetição."
+    ],
+    "mistakes": [
+      "Rodar a bacia ou perder o apoio das mãos.",
+      "Forçar o pé a chegar à mão se a amplitude não o permitir."
+    ],
+    "impact": "low",
+    "unilateral": false,
+    "visual": {
+      "status": "pending-validation",
+      "start": null,
+      "end": null,
+      "animation": null,
+      "reviewer": null
+    },
+    "easier": [
+      "ex-6-17"
+    ],
+    "harder": [],
+    "aliases": [
+      "Escalador lateral",
+      "Escalador em prancha com pé à mão"
+    ]
+  },
+  {
+    "id": "ex-6-34",
+    "name": "Flexão com meio burpee",
+    "category": "Cardio e corpo inteiro",
+    "primary": [
+      "Peitoral",
+      "Tríceps",
+      "Quadríceps"
+    ],
+    "secondary": [
+      "Deltoide anterior",
+      "Core"
+    ],
+    "pattern": "global",
+    "difficulty": 2,
+    "execution": "reps",
+    "recommendedSeconds": 40,
+    "recommendedReps": 8,
+    "recommendedSets": 3,
+    "recommendedRest": 30,
+    "instructions": [
+      "Começa em prancha alta e faz uma flexão completa.",
+      "Depois de voltares a estender os braços, salta com os dois pés para perto das mãos, mantendo-as no chão.",
+      "Salta com os pés para trás e regressa à posição de flexão. Não te levantes. Uma flexão e os dois saltos contam uma repetição."
+    ],
+    "mistakes": [
+      "Deixar a bacia cair durante a flexão ou aterrar com os joelhos rígidos.",
+      "Retirar as mãos do chão durante os saltos dos pés."
+    ],
+    "impact": "high",
+    "unilateral": false,
+    "visual": {
+      "status": "pending-validation",
+      "start": null,
+      "end": null,
+      "animation": null,
+      "reviewer": null
+    },
+    "easier": [
+      "ex-6-04",
+      "ex-1-01"
+    ],
+    "harder": [
+      "ex-6-01"
+    ],
+    "aliases": [
+      "Meio burpee com flexão"
+    ]
+  },
+  {
     "id": "ex-6-07",
     "name": "Step jacks",
     "category": "Cardio e corpo inteiro",
@@ -5267,7 +5652,11 @@ export const exercises = [
       "ex-6-06",
       "ex-6-07"
     ],
-    "harder": []
+    "harder": [],
+    "aliases": [
+      "Joelhos acima",
+      "Corrida com joelhos altos"
+    ]
   },
   {
     "id": "ex-6-09",

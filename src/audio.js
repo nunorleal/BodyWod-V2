@@ -10,11 +10,50 @@ const countWords=['zero','um','dois','três','quatro','cinco','seis','sete','oit
 export function spokenNumber(n){if(n<20)return countWords[n]??String(n);const tens={20:'vinte',30:'trinta',40:'quarenta',50:'cinquenta',60:'sessenta'};const base=Math.floor(n/10)*10;return tens[base]?tens[base]+(n%10?' e '+countWords[n%10]:''):String(n)}
 // Pronunciation hints belong only to the speech engine, not exercise names or UI.
 export function speechPronunciation(text){return text.replace(/flexões/gi,word=>word.replace(/e/i,letter=>letter==='E'?'É':'é'))}
+// Keep the English exercise term in English and any qualifier or cue in pt-PT.
+const englishExerciseTerms=new Map([
+ ['Pike push-ups','flexões em V invertido'],['Bicycle crunches','abdominais de bicicleta'],
+ ['Russian twists','rotações russas'],['Mountain climbers','escaladores'],['Jumping jacks','saltos militares'],
+ ['Step jacks','saltos militares sem salto'],['Squat thrusts','saltos para prancha'],
+ ['High knees','corrida com joelhos altos'],['Bear crawl','andar em urso'],['Crab walk','andar em caranguejo'],
+ ['Bear hold','posição de urso'],['Hollow hold','posição côncava'],['Hollow rocks','balanços em posição côncava'],
+ ['Bird dog','extensão alternada em quatro apoios'],['Dead bug','extensão alternada deitado'],
+ ['Donkey kicks','elevações de perna em quatro apoios'],['Fire hydrants','aberturas da anca em quatro apoios'],
+ ['Frog pumps','pontes de glúteos em borboleta'],['Clamshell','abertura da anca de lado'],
+ ['Lunges','passadas'],['Burpees','bârpis'],['Burpee','bârpi'],['Pike','posição em V invertido'],
+ ['Skaters','saltos de patinador'],['Swimmers','nadadores'],['Superman','super-homem'],
+ ['Crunches','abdominais'],['Crunch','abdominal'],['Sit-ups','elevações do tronco'],
+ ['V-ups','abdominais em V'],['Tuck-ups','encolhimentos abdominais'],
+ ['Inchworm','caminhada com as mãos'],['Curl','flexão'],['Cossack','cossaco']
+].map(([name,pt])=>[name.toLowerCase(),pt]));
+const englishExercisePattern=new RegExp('\\b(?:'+[...englishExerciseTerms.keys()].join('|')+')\\b','gi');
+function exerciseSpeechParts(text,englishVoice){
+ if(!englishVoice)return [{text:speechPronunciation(text.replace(englishExercisePattern,term=>englishExerciseTerms.get(term.toLowerCase()))),english:false}];
+ const parts=[];let start=0;
+ const push=(value,english)=>{
+  const clean=value.trim();if(!clean)return;
+  if(!/\p{L}|\d/u.test(clean)){if(parts.length)parts.at(-1).text+=clean;return}
+  parts.push({text:english?clean:speechPronunciation(clean),english});
+ };
+ for(const match of text.matchAll(englishExercisePattern)){
+  push(text.slice(start,match.index),false);push(match[0],true);start=match.index+match[0].length;
+ }
+ push(text.slice(start),false);
+ return parts.length?parts:[{text,english:false}];
+}
+// Voice descriptors expose names and locales, so prefer recognised feminine English voices by name.
+const feminineEnglishVoice=/\b(?:female|serena|martha|kate|sandy|samantha|ava|allison|susan|karen|moira|fiona|tessa|victoria|siri|sonia|zira|jenny|aria|emma|amy|flo)\b/i;
+function chooseEnglishVoice(voices,locale){
+ const english=voices.filter(v=>/^en(?:-|$)/.test(locale(v)));
+ const feminine=english.filter(v=>!(/\bmale\b/i.test(v.name))&&feminineEnglishVoice.test(v.name));
+ const choose=list=>list.find(v=>v.localService&&locale(v)==='en-gb')||list.find(v=>v.localService)||list.find(v=>locale(v)==='en-gb')||list[0];
+ return choose(feminine)||choose(english);
+}
 export class CoachAudio {
  constructor(getPreferences,onStatus=()=>{},onNarration=()=>{}){this.onNarration=onNarration;this.preferences=getPreferences;this.onStatus=onStatus;this.context=null;this.voices=[];this.activeNodes=new Set();this.utterances=new Set();this.lastInstruction='';this.lastSpoken='';this.error='';this.speechError='';this.beepCount=0;this.spokenCount=0;this.resetCue();this.refreshVoices();globalThis.speechSynthesis?.addEventListener('voiceschanged',()=>this.refreshVoices())}
  notify(){this.onStatus(this.status)}
  get status(){return {context:this.context?.state||'not-started',voice:this.voice?.name||'',voiceAvailable:!!this.voice,beepCount:this.beepCount,spokenCount:this.spokenCount,lastInstruction:this.lastInstruction,lastSpoken:this.lastSpoken,error:this.error||this.speechError}}
- refreshVoices(){this.voices=(globalThis.speechSynthesis?.getVoices()||[]).filter(v=>v.lang.toLowerCase().replaceAll('_','-')==='pt-pt');this.notify()}
+ refreshVoices(){const all=globalThis.speechSynthesis?.getVoices()||[],locale=v=>v.lang.toLowerCase().replaceAll('_','-');this.voices=all.filter(v=>locale(v)==='pt-pt');this.englishVoice=chooseEnglishVoice(all,locale);this.notify()}
  get voice(){const p=this.preferences();return this.voices.find(v=>v.voiceURI===p.voiceURI)||this.voices.find(v=>v.localService)||this.voices[0]}
  resetCue(){this.stepKey=null;this.lastSecond=null;this.lastRep=0;this.lastElapsed=-1;this.switchedSide=false;this.clusterRest=null}
  async unlock(){
@@ -26,40 +65,41 @@ export class CoachAudio {
  speak(text,{priority='instruction',hold=false,after=null,onStart=null}={}){
  const p=this.preferences(),synth=globalThis.speechSynthesis;
  if(!p.voice||!synth||!globalThis.SpeechSynthesisUtterance)return false;
- // Voice lists can still be empty on Safari's first tap. Let the native engine
- // resolve pt-PT instead of silently skipping the whole instruction.
  this.refreshVoices();
- try{
- // Keep native utterances alive until completion, and never accumulate stale counts.
+ const englishVoice=this.englishVoice,portugueseVoice=this.voice,parts=exerciseSpeechParts(text,englishVoice);
  const notification=priority==='notification';
- const replace=notification?this.utterances.size>0:priority!=='count'||this.utterances.size>0;
- for(const u of [...this.utterances])u.finish?.(false);
- if(replace)synth.cancel();synth.resume?.();
- const u=new SpeechSynthesisUtterance(speechPronunciation(text));u.lang='pt-PT';if(this.voice)u.voice=this.voice;u.volume=Number(p.voiceVolume);u.rate=priority==='count'?1.08:1.1;
- this.utterances.add(u);
- const release=hold?(this.onNarration()||(()=>{})):(()=>{});if(hold)this.narrationPending=true;
- let done=false,started=false,timer,poll;
- const finish=(continueSpeech=true,beforeAfter=null)=>{if(done)return;done=true;clearTimeout(timer);clearInterval(poll);this.utterances.delete(u);if(hold){this.narrationPending=false;if(this.endNarration===finish)this.endNarration=null;release()}beforeAfter?.();if(continueSpeech)after?.()};
- u.finish=finish;if(hold)this.endNarration=finish;
- const speechBudget=Math.max(1800,Math.min(30000,text.split(/\s+/).length*550+1000));
- const arm=ms=>{clearTimeout(timer);timer=setTimeout(()=>{if(done)return;finish(true,()=>synth.cancel())},ms);timer.unref?.()};
- const markStarted=()=>{if(done||started)return;started=true;this.lastSpoken=text;this.spokenCount++;this.speechError='';arm(speechBudget);onStart?.();this.notify()};
- u.onend=()=>finish();
- u.onstart=markStarted;
- u.onerror=event=>{finish(!['canceled','interrupted'].includes(event.error));if(!['canceled','interrupted'].includes(event.error)){this.speechError='A voz foi interrompida pelo navegador. Testa o som para a reativar.';this.notify()}};
- if(notification){
- // A result announcement does not gate a clock. Keep it alive until native end,
- // even when Safari reports idle or omits onstart between sentence fragments.
- // The cleanup fallback drops references only; it never cancels native speech.
- u.onstart=()=>{if(done||started)return;started=true;this.lastSpoken=text;this.spokenCount++;this.speechError='';onStart?.();this.notify()};
- timer=setTimeout(()=>finish(),60000);timer.unref?.();
- }else{
- // Safari can omit end/error events: release as soon as the native engine is idle.
- poll=setInterval(()=>{if(started&&synth.speaking===false&&synth.pending===false)finish()},100);poll.unref?.();
- timer=setTimeout(()=>{if(done)return;if(synth.speaking===true){markStarted();return}finish(true,()=>synth.cancel())},1200);timer.unref?.();
- }
- synth.speak(u);if(priority!=='count')this.lastInstruction=text;this.notify();return true;
- }catch{for(const u of [...this.utterances])u.finish?.(false);this.speechError='Não foi possível reproduzir a voz pt-PT.';this.notify();return false}
+ let release=()=>{},speechDone=false,callStarted=false;
+ const complete=proceed=>{if(speechDone)return;speechDone=true;if(hold){this.narrationPending=false;this.endNarration=null;release()}if(proceed)after?.()};
+ const failed=()=>{this.speechError='A voz foi interrompida pelo navegador. Testa o som para a reativar.';this.notify()};
+ const say=(index)=>{
+  const part=parts[index],voice=part.english?englishVoice:portugueseVoice;
+  const u=new SpeechSynthesisUtterance(part.text);u.lang=part.english?voice.lang.replaceAll('_','-'):'pt-PT';if(voice)u.voice=voice;u.volume=Number(p.voiceVolume);u.rate=priority==='count'?1.08:1.1;
+  this.utterances.add(u);
+  let done=false,started=false,timer,poll;
+  const finish=(proceed=true,beforeNext=null)=>{
+   if(done)return;done=true;clearTimeout(timer);clearInterval(poll);this.utterances.delete(u);beforeNext?.();
+   if(proceed&&index+1<parts.length){try{say(index+1)}catch{failed();complete(true)}}else complete(proceed);
+  };
+  u.finish=finish;if(hold)this.endNarration=finish;
+  const budget=Math.max(1800,Math.min(30000,part.text.split(/\s+/).length*550+1000));
+  const arm=ms=>{clearTimeout(timer);timer=setTimeout(()=>{if(!done)finish(true,()=>synth.cancel())},ms);timer.unref?.()};
+  const markStarted=()=>{if(done||started)return;started=true;this.speechError='';if(!notification)arm(budget);if(!callStarted){callStarted=true;this.lastSpoken=text;this.spokenCount++;onStart?.()}this.notify()};
+  u.onstart=markStarted;u.onend=()=>finish();
+  u.onerror=event=>{const interrupted=['canceled','interrupted'].includes(event.error);finish(!interrupted);if(!interrupted)failed()};
+  if(notification){timer=setTimeout(()=>finish(),60000);timer.unref?.()}
+  else{
+   poll=setInterval(()=>{if(started&&synth.speaking===false&&synth.pending===false)finish()},100);poll.unref?.();
+   timer=setTimeout(()=>{if(done)return;if(synth.speaking===true){markStarted();return}finish(true,()=>synth.cancel())},1200);timer.unref?.();
+  }
+  try{synth.speak(u)}catch(error){if(index===0){finish(false);throw error}failed();finish(true)}
+ };
+ try{
+  const replace=notification?this.utterances.size>0:priority!=='count'||this.utterances.size>0;
+  for(const u of [...this.utterances])u.finish?.(false);
+  if(replace)synth.cancel();synth.resume?.();
+  if(hold){release=this.onNarration()||(()=>{});this.narrationPending=true}
+  say(0);if(priority!=='count')this.lastInstruction=text;this.notify();return true;
+ }catch{for(const u of [...this.utterances])u.finish?.(false);complete(false);failed();return false}
  }
  beep(type='tick'){
  const p=this.preferences();if(!p.beeps||Number(p.beepVolume)<=0)return false;

@@ -36,3 +36,22 @@ test('FitTempo pushup preset uses 2 seconds per rep while squat preset retains i
  assert.match(COUNTER_DOCUMENT,/preset === 'pushups'[\s\S]*?inputBpm.value = 30/);
  assert.match(COUNTER_DOCUMENT,/preset === 'squats'[\s\S]*?tempoEccentric.value = 3;[\s\S]*?tempoPause1.value = 1;[\s\S]*?tempoConcentric.value = 1;/);
 });
+
+test('explicit lunges repetitions survive reopening an edited Crossfit plan',()=>{
+ const source=generate({minutes:60,level:3,included:['ex-2-11']},{},12);
+ const block=source.blocks.find(b=>b.items.some(i=>i.exercise.id==='ex-2-11'));
+ const item=block.items.find(i=>i.exercise.id==='ex-2-11'),reps=item.reps-1;
+ assert.ok(reps>0);
+ const edited=editItem(source,block.id,item.id,{reps});
+ const saved=JSON.parse(JSON.stringify(edited));
+ // Simulate a later catalogue cadence update. Explicit targets keep their original schedule.
+ for(const b of saved.blocks)for(const i of b.items)if(i.id===item.id)i.exercise={...i.exercise,name:'Lunges com pausa'};
+ for(const step of saved.timeline)if(step.itemId===item.id&&step.kind==='work')step.exercise={...step.exercise,name:'Lunges com pausa'};
+ const savedItem=saved.blocks.flatMap(b=>b.items).find(i=>i.id===item.id);
+ for(const legacy of [false,true]){
+  if(legacy)delete savedItem.repsPinned;
+  const reopened=updateRepetitionTargets(saved);
+  const rounds=reopened.timeline.filter(step=>step.kind==='work'&&step.itemId===item.id);
+  assert.equal(rounds.length,item.sets);assert.ok(rounds.every(step=>step.reps===reps));
+ }
+});

@@ -1,7 +1,7 @@
 // Programming roles are separate from technical difficulty: a simple squat can be hard at volume.
 const activationNames=new Set(['Anjos invertidos','Elevações em Y','Elevações em T','Elevações em W','Elevações em I','Sequência Y-T-W','Retração escapular deitado','Deslizamentos dos braços na parede','Flexões escapulares','Flexões escapulares em prancha alta','Círculos dos braços','Braços em cruz isométricos','Pressão das palmas','Curl de bíceps com autorresistência','Extensão de tríceps com autorresistência']);
 const posteriorNames=new Set(['Superman isométrico','Swimmers','Bird dog com cotovelo ao joelho','Bird dog isométrico','Dobradiça da anca a uma perna','Prancha invertida']);
-const cardioNames=new Set(['Burpees','Burpees sem salto','Burpees sem flexão','Squat thrusts','High knees','Skaters','Mountain climbers','Mountain climbers cruzados','Bear crawl','Bear crawl para trás','Crab walk','Inchworm com flexão','Prancha com abertura dos pés','Boxe com deslocamento','Mountain climbers lentos','Prancha com passos dos pés','Agachamento com socos']);
+const cardioNames=new Set(['Saltos militares abre e fecha','Salto militar “polisapato”','Escalador com pé ao lado da mão','Flexão com meio burpee','Burpees','Burpees sem salto','Burpees sem flexão','Squat thrusts','High knees','Skaters','Mountain climbers','Mountain climbers cruzados','Bear crawl','Bear crawl para trás','Crab walk','Inchworm com flexão','Prancha com abertura dos pés','Boxe com deslocamento','Mountain climbers lentos','Prancha com passos dos pés','Agachamento com socos']);
 export function trainingRole(exercise){return activationNames.has(exercise.name)?'activation':['Aquecimento','Retorno à calma'].includes(exercise.category)?'mobility':'training'}
 export function suitableForMain(exercise,level){
  if(level!==3)return true;
@@ -25,7 +25,7 @@ export const advancedWodSequence=[
 export function executionCadence(exercise,level=1){
  if(exercise.execution!=='reps')return null;
  const n=exercise.name;if(n==='Flexões clássicas')return 2;let seconds=2.5;
- if(/^Burpees|Inchworm/i.test(n))seconds=5;
+ if(/^Burpees|Inchworm|^Flexão com meio burpee/i.test(n))seconds=5;
  else if(/pausa|excêntric|lent[ao]|descida lenta/i.test(n))seconds=5;
  else if(/Prancha com subida|Flexões hindu/i.test(n))seconds=4;
  else if(exercise.category==='Peito e tríceps'||/Pike push-ups/i.test(n))seconds=3;
@@ -36,7 +36,7 @@ export function executionCadence(exercise,level=1){
 }
 export function advancedRepProfile(exercise){
  if(exercise.execution!=='reps')return null;
- return {cadence:executionCadence(exercise,3),cap:90,cluster:{every:/^Burpees|Inchworm/i.test(exercise.name)?10:15,rest:10}};
+ return {cadence:executionCadence(exercise,3),cap:90,cluster:{every:/^Burpees|Inchworm|^Flexão com meio burpee/i.test(exercise.name)?10:15,rest:10}};
 }
 // A cluster window includes preparation, repetitions and its short recoveries.
 export function clusterRepTime(index,{cadence=3,cluster,repTimes},start=6){if(repTimes)return repTimes[index];return start+index*cadence+Math.floor(index/cluster.every)*cluster.rest}

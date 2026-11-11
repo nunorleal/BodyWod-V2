@@ -118,3 +118,23 @@ test('an initially empty native voice list still requests Portuguese speech and 
  assert.equal(coach.speak('um',{priority:'count'}),true);
  assert.equal(spoken[1].voice,portuguese);
 }));
+
+test('English exercise terms prefer a feminine British voice and keep Portuguese cues on Joana',()=>harness(({coach,clock,spoken,cancels})=>{
+ const pt={name:'Joana',lang:'pt-PT',localService:true};
+ const en={name:'Sandy (Inglês (RU))',lang:'en-GB',localService:true};
+ globalThis.speechSynthesis.getVoices=()=>[pt,{name:'Daniel',lang:'en-GB',localService:true},{name:'Samantha',lang:'en-US',localService:true},en];
+ let completed=0,started=0;clock.start();
+ coach.speak('Lunges alternados. Cinco repetições. Começa.',{hold:true,after:()=>completed++,onStart:()=>started++});
+ assert.equal(spoken[0].text,'Lunges');assert.equal(spoken[0].voice,en);assert.equal(spoken[0].lang,'en-GB');
+ spoken[0].onstart();spoken[0].onend();
+ assert.equal(clock.held,true);assert.equal(completed,0);
+ assert.equal(spoken[1].text,'alternados. Cinco repetições. Começa.');assert.equal(spoken[1].voice,pt);
+ spoken[1].onstart();spoken[1].onend();
+ assert.equal(cancels(),1);assert.equal(clock.held,false);assert.equal(started,1);assert.equal(completed,1);
+}));
+test('pausing a bilingual cue does not play its remaining fragments',()=>harness(({coach,clock,spoken})=>{
+ globalThis.speechSynthesis.getVoices=()=>[{lang:'pt-PT',localService:true},{lang:'en-US',localService:true}];
+ clock.start();coach.speak('Pike push-ups com pausa. Começa.',{hold:true});
+ const old=spoken[0];assert.equal(old.text,'Pike push-ups');coach.stop();old.onend();
+ assert.equal(spoken.length,1);assert.equal(clock.held,false);
+}));

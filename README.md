@@ -14,7 +14,7 @@ Neste ambiente, Node está em `/Users/nunoleal/.cache/codex-runtimes/codex-prima
 
 | Módulo | Responsabilidade |
 | --- | --- |
-| `src/exercises.js` | 154 exercícios reais/variantes e 24 movimentos de aquecimento/retorno à calma, metadados e estrutura visual |
+| `src/exercises.js` | 162 exercícios reais/variantes e 24 movimentos de aquecimento/retorno à calma, metadados e estrutura visual |
 | `src/training.js` | Papéis de ativação/treino, exigência do avançado e sequência WOD de referência |
 | `src/generator.js` | Seleção por categoria, padrões, nível, impacto, favoritos e recência; construção e edição da linha temporal |
 | `src/timer.js` | Relógio central monotónico, pausa/retoma, navegação, resultados e recuperação |

@@ -59,5 +59,38 @@ test('a quota which rejects the old full snapshot accepts compact workout checkp
 test('checkpoint failures back off while keeping the newest in-memory progress',()=>{
  let attempts=0;const store=createStore({getItem:()=>null,setItem:()=>{attempts++;throw new DOMException('full','QuotaExceededError')}});
  store.update(s=>s.session={elapsed:2});store.update(s=>s.session.elapsed=4);store.update(s=>s.session.elapsed=6);
- assert.equal(attempts,1);assert.equal(JSON.parse(store.export()).session.elapsed,6);assert.equal(store.retry(),false);assert.equal(attempts,2);
+ assert.equal(attempts,2);assert.equal(JSON.parse(store.export()).session.elapsed,6);assert.equal(store.retry(),false);assert.equal(attempts,4);
+});
+test('quota fallback preserves different plans, favourites, live progress and Unicode notes',()=>{
+ const state=emptyState();
+ state.saved=Array.from({length:8},(_,i)=>generate({minutes:60,level:3},{},i+10));
+ state.history=state.saved.map((plan,i)=>({id:String(i),plan,notes:'Treino em São João ~ 💪 ~ '.repeat(i+10)}));
+ state.favorites=['push-up'];
+ state.session=new SessionClock(state.saved[0]).serialize();
+ const compact=encodeState(state),limit=Math.floor(compact.length*.8);
+ let raw=compact,attempts=0;
+ const storage={getItem:()=>raw,setItem:(key,value)=>{
+  attempts++;
+  if(value.length>limit)throw new DOMException('full','QuotaExceededError');
+  raw=value;
+ }};
+ const store=createStore(storage);
+ assert.deepEqual(store.state,state);
+ assert.equal(store.retry(),true);
+ assert.equal(attempts,2);
+ assert.match(raw,/^bodywod\.lz\.v1:/);
+ assert.equal(store.warning,'');
+ const reopened=createStore(storage);
+ assert.deepEqual(reopened.state,state);
+ assert.deepEqual(JSON.parse(reopened.export()),state);
+ assert.equal(reopened.update(s=>s.history[0].notes+='Atualizado'),true);
+ assert.equal(attempts,3);
+ assert.equal(createStore(storage).state.history[0].notes,state.history[0].notes+'Atualizado');
+});
+test('malformed compressed data keep the original storage untouched',()=>{
+ let writes=0;
+ const store=createStore({getItem:()=>'bodywod.lz.v1:~   ',setItem:()=>{writes++}});
+ assert.equal(store.status.readFailed,true);
+ assert.equal(store.retry(),false);
+ assert.equal(writes,0);
 });

@@ -1,4 +1,4 @@
-const CACHE='bodywod-v1.51';
+const CACHE='bodywod-v1.55';
 const FILES=['./','./index.html','./styles.css','./manifest.webmanifest','./assets/icons/apple-touch-icon.png','./assets/icons/apple-touch-icon-ipad.png','./assets/icons/apple-touch-icon-ipad-152.png','./assets/icons/icon-192.png','./assets/icons/icon-512.png','./assets/icons/favicon-32.png','./assets/icons/favicon-96.png','./src/version.js','./src/counter.js','./src/counter-document.js','./src/movement.js','./src/anatomy.js','./src/app.js','./src/audio.js','./src/exercises.js','./src/training.js','./src/generator.js','./src/storage.js','./src/timer.js','./src/sequences.js','./src/sequence-ui.js','./src/sequence-drag.js','./src/celebration.js','./src/celebration.css','./src/pace.js','./src/backup.js'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('bodywod-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));

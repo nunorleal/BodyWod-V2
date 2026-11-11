@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {createSequenceUI} from '../src/sequence-ui.js';
 import {emptySequences,sequenceItem} from '../src/sequences.js';
 
-test('starting a real sequence requests speech before asynchronous beep activation finishes',async()=>{
+test('editing saved lunges updates the reopened plan and starts its new counts before beep activation finishes',async()=>{
  const names=['document','window','navigator','speechSynthesis','SpeechSynthesisUtterance','AudioContext','requestAnimationFrame','cancelAnimationFrame'];
  const old=Object.fromEntries(names.map(name=>[name,Object.getOwnPropertyDescriptor(globalThis,name)]));
  const spoken=[],listeners={},fields=new Map();let resolveAudio,activationFinished=false,inTap=true;
@@ -15,14 +15,21 @@ test('starting a real sequence requests speech before asynchronous beep activati
  set('SpeechSynthesisUtterance',class{constructor(text){this.text=text}});
  set('speechSynthesis',{getVoices:()=>[{name:'Joana',lang:'pt-PT',localService:true}],resume(){},cancel(){},addEventListener(){},speak(u){assert.equal(inTap,true,'native speech needs to be requested in the initiating tap');assert.equal(activationFinished,false);spoken.push(u)}});
  set('AudioContext',class{constructor(){this.state='suspended'}addEventListener(){}resume(){return new Promise(resolve=>{resolveAudio=()=>{activationFinished=true;this.state='running';resolve()}})}suspend(){this.state='suspended';return Promise.resolve()}});
- const data=emptySequences();data.draft.items=[{...sequenceItem('ex-1-01'),reps:5,sets:1,rest:0}];
+ const data=emptySequences();data.draft.items=[{...sequenceItem('ex-2-11'),reps:10,sets:1,rest:0}];data.plans=[structuredClone(data.draft)];
  const store={state:{fittempoSequences:data,preferences:{voice:true,voiceVolume:1}}};
  const ui=createSequenceUI({store,save:fn=>fn(store.state),toast(){},showExercise(){}});ui.mount(root);
+ const savedId=data.plans[0].id,itemId=data.plans[0].items[0].id;
+ const open=()=>listeners.click({target:{closest:()=>({dataset:{seq:'load',id:savedId}})}});
+ await open();
+ for(const [field,value] of [['reps','5'],['sets','2']])listeners.change({type:'change',target:{dataset:{field},value,closest:()=>({dataset:{item:itemId}}),checkValidity:()=>true}});
+ await open();
+ assert.equal(data.draft.items[0].reps,5);assert.equal(data.draft.items[0].sets,2);
  const click=listeners.click({target:{closest:()=>({dataset:{seq:'start'}})}});
  assert.equal(spoken.length,1,'the first instruction must not wait for AudioContext.resume');
- assert.match(spoken[0].text,/cinco repetições/);
+ assert.match(spoken[0].text,/Série um de dois. cinco repetições/);
  inTap=false;resolveAudio();await click;
  assert.equal(activationFinished,true);
+ assert.equal(data.session.plan.items[0].reps,5);assert.equal(data.session.plan.items[0].sets,2);
  ui.suspend();
  }finally{for(const name of names){if(old[name])Object.defineProperty(globalThis,name,old[name]);else delete globalThis[name]}}
 });
@@ -46,7 +53,7 @@ test('rest announces the next movement while time runs and zero starts work with
  await listeners.click({target:{closest:()=>({dataset:{seq:'start'}})}});
  spoken[0].onend();assert.equal(spoken[1].text,'Começa.');spoken[1].onstart();spoken[1].onend();
  now=1000;nextFrame();
- assert.match(spoken.at(-1).text,/A seguir: Burpees/);
+ assert.match(spoken.at(-1).text,/A seguir: bârpis/);
  assert.equal(fields.get('#sequence-phase').textContent,'Descanso');
  // Do not deliver any voice completion: the clock must keep running anyway.
  now=2000;nextFrame();assert.equal(fields.get('#sequence-stage-clock').textContent,'00:04');

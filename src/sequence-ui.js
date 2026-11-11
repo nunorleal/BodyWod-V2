@@ -14,9 +14,9 @@ export function createSequenceUI({store,save,toast,showExercise,onComplete=()=>{
  const decimalText=value=>Number(value).toLocaleString('pt-PT',{useGrouping:false,maximumFractionDigits:2});
  const number=(label,field,value,min,max,step=1)=>`<label>${label}<input type="${step===.01?'text':'number'}" inputmode="${step===.01?'decimal':'numeric'}" data-field="${field}" value="${step===.01?decimalText(value):value}" ${step===.01?`data-decimal="true" data-min="${min}" data-max="${max}" placeholder="Ex.: 1,33"`:`min="${min}" max="${max}" step="${step}"`} required></label>`;
  function estimate(){try{const steps=sequenceTimeline(data().draft,data().cadences);return formatSequenceDuration(steps.at(-1).end)}catch{return '—'}}
- function library(){const order=['Aquecimento','Peito e tríceps','Ombros e braços','Pernas e glúteos','Costas e cadeia posterior','Abdominais e core','Cardio e corpo inteiro','Retorno à calma','Descanso'];let previous='';const found=sequenceExercises.filter(e=>sequenceCategory(e,category)&&e.name.toLocaleLowerCase('pt').includes(search.toLocaleLowerCase('pt'))).sort((a,b)=>order.indexOf(a.category)-order.indexOf(b.category));return `<div class="sequence-library">${found.length?found.map(e=>{const heading=category==='Todos'&&previous!==e.category?`<h3 class="sequence-category-heading">${htmlEscape(e.category)}</h3>`:'';previous=e.category;return `${heading}<div class="sequence-library-row"><span><strong>${htmlEscape(e.name)}</strong><small>${htmlEscape(e.category)}</small></span><div class="sequence-library-actions">${e.id===sequenceRestExercise.id?'':action('details','ⓘ Ver exercício',`data-id="${e.id}" aria-label="Ver exercício: ${htmlEscape(e.name)}"`)}${action('add','+ Adicionar',`data-id="${e.id}" aria-label="Adicionar ${htmlEscape(e.name)}"`)}</div></div>`}).join(''):'<p class="muted">Nenhum exercício encontrado.</p>'}</div>`}
+ function library(){const order=['Aquecimento','Peito e tríceps','Ombros e braços','Pernas e glúteos','Costas e cadeia posterior','Abdominais e core','Cardio e corpo inteiro','Retorno à calma','Descanso'];let previous='';const found=sequenceExercises.filter(e=>sequenceCategory(e,category)&&[e.name,...(e.aliases||[])].some(name=>name.toLocaleLowerCase('pt').includes(search.toLocaleLowerCase('pt')))).sort((a,b)=>order.indexOf(a.category)-order.indexOf(b.category));return `<div class="sequence-library">${found.length?found.map(e=>{const heading=category==='Todos'&&previous!==e.category?`<h3 class="sequence-category-heading">${htmlEscape(e.category)}</h3>`:'';previous=e.category;return `${heading}<div class="sequence-library-row"><span><strong>${htmlEscape(e.name)}</strong><small>${htmlEscape(e.category)}</small></span><div class="sequence-library-actions">${e.id===sequenceRestExercise.id?'':action('details','ⓘ Ver exercício',`data-id="${e.id}" aria-label="Ver exercício: ${htmlEscape(e.name)}"`)}${action('add','+ Adicionar',`data-id="${e.id}" aria-label="Adicionar ${htmlEscape(e.name)}"`)}</div></div>`}).join(''):'<p class="muted">Nenhum exercício encontrado.</p>'}</div>`}
  function builder(){const d=data(),draft=d.draft,defaults=sequenceDefaults(draft),paceIds=[...new Set(draft.items.filter(i=>i.mode==='reps').map(i=>i.exerciseId))];return `<div class="sequence-intro"><h2>Monta o teu treino</h2><p class="sub">Escolhe os movimentos, mede o teu ritmo e treina com voz.</p></div>
- ${d.session?`<div class="notice"><p>Há uma sequência guardada em pausa.</p>${action('recover','Recuperar sequência')}${action('discardSession','Descartar sessão guardada','','text-button')}</div>`:''}
+ ${d.session?`<div class="notice"><p>Há uma sequência em pausa. Para treinar com os valores editados abaixo, toca em Começar.</p>${action('recover','Recuperar sequência')}${action('discardSession','Descartar sessão guardada','','text-button')}</div>`:''}
  ${d.plans.length?`<details class="sequence-saved"><summary>Sequências guardadas (${d.plans.length})</summary>${d.plans.map(p=>`<div class="sequence-library-row"><span>${htmlEscape(p.name)}</span>${action('load','Abrir',`data-id="${p.id}"`)}</div>`).join('')}</details>`:''}
  <label class="sequence-name">Nome da sequência<input id="sequence-name" maxlength="80" value="${htmlEscape(draft.name)}"></label>
  <section class="card sequence-defaults" aria-label="Valores gerais da sequência"><h3>Valores gerais</h3><p class="small muted">Define antes de adicionar exercícios. Depois podes ajustar cada um.</p><div class="sequence-fields"><label>Séries gerais<input id="sequence-default-sets" type="number" inputmode="numeric" min="1" max="100" step="1" value="${defaults.sets}" required></label><label>Repetições gerais<input id="sequence-default-reps" type="number" inputmode="numeric" min="1" max="1000" step="1" value="${defaults.reps}" required></label></div>${action('applyDefaults','Aplicar também aos exercícios já inseridos',draft.items.length?'':'disabled','secondary full')}<p class="small muted">Nos exercícios por tempo, aplica apenas o número de séries.</p></section>
@@ -136,7 +136,14 @@ export function createSequenceUI({store,save,toast,showExercise,onComplete=()=>{
  else if(a==='testNext'){await nextPaceTest()}
  else if(a==='testBack'){generation++;coach.stop();paceTest=null;runner=null;render()}
  else if(a==='testAdjust'){const id=paceTest.exerciseId;generation++;coach.stop();paceTest=null;calibration={exerciseId:id,reps:5,running:false,waiting:false};render()}
- else if(a==='start'){paceTest=null;runner=new SequenceRunner(data().draft,data().cadences);lastRep=0;render();await resume();checkpoint()}
+ else if(a==='start'){
+  const fields=[...root.querySelector('#sequence-builder').querySelectorAll('[data-field="sets"],[data-field="reps"]')];
+  update(d=>{
+   for(const field of fields){const item=d.draft.items.find(item=>item.id===field.closest('[data-item]').dataset.item);if(item)item[field.dataset.field]=Number(field.value)}
+   validateSequence(d.draft);
+   const saved=d.plans.findIndex(plan=>plan.id===d.draft.id);if(saved>=0)d.plans[saved]=structuredClone(d.draft);
+  });
+  paceTest=null;runner=new SequenceRunner(data().draft,data().cadences);lastRep=0;render();await resume();checkpoint()}
  else if(a==='recover'){paceTest=null;runner=SequenceRunner.restore(data().session);lastRep=runner.snapshot().rep;render();toast('Sequência recuperada em pausa.')}
  else if(a==='pause'){if(runner.running)pause();else await resume()}
  else if(a==='stop'){const testing=!!paceTest;pause();runner=null;if(paceTest)paceTest=null;else update(d=>d.session=null);render();toast(testing?'Teste terminado. O treino mantém-se disponível.':'Sequência terminada. O plano mantém-se disponível.')}
@@ -157,7 +164,12 @@ export function createSequenceUI({store,save,toast,showExercise,onComplete=()=>{
   try{value=parseSequenceSeconds(el.value,{min:Number(el.dataset.min),max:Number(el.dataset.max)});el.setCustomValidity('')}
   catch(error){el.setCustomValidity(error.message);if(event.type==='change')el.reportValidity();return}
  }else{if(!el.checkValidity()){if(event.type==='change')el.reportValidity();return}value=field==='mode'?el.value:Number(el.value)}
- update(d=>{const item=d.draft.items.find(i=>i.id===itemId);if(field==='cadence')setSequenceCadence(d,item.exerciseId,value);else item[field]=value;validateSequence(d.draft)});
+ update(d=>{const item=d.draft.items.find(i=>i.id===itemId);if(field==='cadence')setSequenceCadence(d,item.exerciseId,value);else item[field]=value;validateSequence(d.draft);
+  if(field==='sets'||field==='reps'){
+   const savedItem=d.plans.find(plan=>plan.id===d.draft.id)?.items.find(entry=>entry.id===itemId);
+   if(savedItem&&savedItem.mode===item.mode)savedItem[field]=value;
+  }
+ });
  if(field==='mode')render();else{
   refreshSectionTotals();const ids=[...new Set(data().draft.items.filter(i=>i.mode==='reps').map(i=>i.exerciseId))];root.querySelector('#sequence-confirmed-count').textContent=`${ids.filter(id=>isSequencePaceVerified(data(),id)).length} de ${ids.length} velocidades confirmadas`;
   if(el.dataset.decimal&&event.type==='change')el.value=decimalText(value);
