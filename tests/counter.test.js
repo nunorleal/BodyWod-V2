@@ -27,11 +27,11 @@ test('integration pauses automatic/manual timers only on authenticated parent me
  events.message({source:parent,data:{type:'bodywod-counter',action:'pause'}});assert.deepEqual(calls,['work','manual','speech','wake','audio']);
  calls.length=0;ctx.document.hidden=true;docEvents.visibilitychange();assert.ok(calls.includes('work')&&calls.includes('manual'));
 });
-test('counter history survives blocked writes in memory without touching BodyWOD history',()=>{
- const start=COUNTER_DOCUMENT.indexOf('let integratedHistory='),end=COUNTER_DOCUMENT.indexOf('function renderHistoryModal()',start),notice={textContent:''},keys=[];
- const ctx={localStorage:{getItem:k=>{keys.push(k);return '[{"id":"old","reps":3}]'},setItem:k=>{keys.push(k);throw Error('quota')}},document:{getElementById:()=>notice},renderHistoryModal:()=>{}};
+test('counter publishes the new workout with its legacy history without writing localStorage',()=>{
+ const start=COUNTER_DOCUMENT.indexOf('let integratedHistory='),end=COUNTER_DOCUMENT.indexOf('function renderHistoryModal()',start),keys=[],published=[];
+ const ctx={localStorage:{getItem:k=>{keys.push(k);return '[{"id":"old","reps":3}]'},setItem:()=>assert.fail('History is persisted by the parent')},renderHistoryModal:()=>{},publishCounterData:()=>published.push(JSON.parse(vm.runInContext('JSON.stringify(getHistory())',ctx)))};
  vm.createContext(ctx);vm.runInContext(COUNTER_DOCUMENT.slice(start,end),ctx);vm.runInContext('saveWorkoutToHistory({id:"new",reps:2})',ctx);
- const history=JSON.parse(vm.runInContext('JSON.stringify(getHistory())',ctx));assert.deepEqual(history.map(x=>x.id),['new','old']);assert.match(notice.textContent,/apenas em memória/);assert.ok(keys.every(k=>k==='fittempo_history'));
+ const history=JSON.parse(vm.runInContext('JSON.stringify(getHistory())',ctx));assert.deepEqual(history.map(x=>x.id),['new','old']);assert.deepEqual(published,[history]);assert.deepEqual(keys,['fittempo_history']);
 });
 test('top settings synchronize real counter sound/voice and keep history accessible after hiding its toolbar',()=>{
  const events={},messages=[],state={status:'IDLE',isVoiceEnabled:true,isSoundEnabled:true},attrs={},parent={postMessage:data=>messages.push(data)};let historyOpened=0,cancelled=0;

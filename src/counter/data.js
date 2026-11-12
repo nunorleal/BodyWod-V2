@@ -7,7 +7,6 @@ function publishCounterData(){parent.postMessage({type:'bodywod-counter-data-cha
 function restoreFitTempoSnapshot(data){
  pauseIntegratedCounter();
  integratedHistory=structuredClone(data.history||[]);
- try{localStorage.setItem('fittempo_history',JSON.stringify(integratedHistory));integratedReadFailed=false}catch{document.getElementById('integration-notice').textContent='Dados importados em memória; a gravação do FitTempo está bloqueada.'}
  for(const id of fitTempoInputIds)if(typeof data.inputs?.[id]==='string')document.getElementById(id).value=data.inputs[id];
  if(data.settings){state.isVoiceEnabled=data.settings.voice!==false;state.isSoundEnabled=data.settings.beeps!==false;sendCounterSettings()}
  if(state.status==='IDLE'){updateCadenceValues();updateCalculations()}

@@ -7,7 +7,6 @@ export function buildCounter(){
  const automaticGoal=fs.readFileSync('src/counter/automatic-goal.js','utf8').replace(/^export /gm,'');
  const css=fs.readFileSync('src/counter/local.css','utf8')+'\n'+fs.readFileSync('src/celebration.css','utf8'),icons=fs.readFileSync('src/counter/icons.js','utf8'),bridge=fs.readFileSync('src/counter/bridge.js','utf8'),progress=fs.readFileSync('src/counter/progress.js','utf8').replace(/^export /gm,'');
  html=html.replace('</head>',`<style>${css}</style><script>${icons}\n${progress}\n${automaticGoal}\n${celebration}\n${leadIn}</script></head>`);
- html=html.replace(/<body([^>]*)>/,'<body$1><p id="integration-notice" role="status"></p>');
  html=html.replace('</body>',`${fs.readFileSync('src/counter/celebration.html','utf8')}<script>${bridge}\n${fs.readFileSync('src/counter/data.js','utf8')}\ninstallFitTempoCelebration();</script></body>`);
  html=html.replace('<span>Séries</span>','<span>Séries</span><span id="seriesFillLabel" class="series-fill-label" hidden></span>');
  html=html.replace('<div class="manual-actions">','<div id="seriesFillProgress" class="counter-sr-only" role="progressbar" aria-label="Progresso da série automática" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden></div><div class="manual-actions">');
@@ -53,13 +52,13 @@ export function buildCounter(){
  // Strength presets allow a complete repetition; explicit user settings stay editable.
  html=html.replace('id="inputBpm" value="60"','id="inputBpm" value="30"');
  html=html.replace("if (preset === 'pushups') {\n                    inputTotalReps.value = 100;\n                    inputRepsPerSet.value = 10;\n                    inputBpm.value = 60;", "if (preset === 'pushups') {\n                    inputTotalReps.value = 100;\n                    inputRepsPerSet.value = 10;\n                    inputBpm.value = 30;");
- // Retain the supplied app's history key. Failure never aborts workout completion.
- html=html.replace('function getHistory() {','let integratedHistory=null,integratedReadFailed=false;\n function getHistory() {');
+ // Read the legacy key. The parent now persists the integrated counter history.
+ html=html.replace('function getHistory() {','let integratedHistory=null;\n function getHistory() {');
  html=html.replace("return JSON.parse(localStorage.getItem('fittempo_history') || '[]');", "if(integratedHistory)return integratedHistory;const data=JSON.parse(localStorage.getItem('fittempo_history')||'[]');if(!Array.isArray(data))throw Error('Histórico inválido');return data;");
- html=html.replace(/(function getHistory\(\)[\s\S]*?catch \(e\) \{)\s*return \[\];/,"$1 integratedReadFailed=true;return integratedHistory||[];");
- html=html.replace("localStorage.setItem('fittempo_history', JSON.stringify(history));", "integratedHistory=history;try{if(integratedReadFailed)throw Error('Leitura bloqueada');localStorage.setItem('fittempo_history',JSON.stringify(history));document.getElementById('integration-notice').textContent=''}catch{document.getElementById('integration-notice').textContent='Histórico do contador apenas em memória: não foi possível guardar neste navegador.'}");
+ html=html.replace(/(function getHistory\(\)[\s\S]*?catch \(e\) \{)\s*return \[\];/,"$1 return [];");
+ html=html.replace("localStorage.setItem('fittempo_history', JSON.stringify(history));", "integratedHistory=history;");
  html=html.replace('            renderHistoryModal();\n        }',"            renderHistoryModal();if(typeof publishCounterData==='function')publishCounterData();\n        }");
- html=html.replace("localStorage.removeItem('fittempo_history');", "try{localStorage.removeItem('fittempo_history');integratedHistory=[];integratedReadFailed=false}catch{document.getElementById('integration-notice').textContent='Não foi possível apagar o histórico do contador.'}");
+ html=html.replace("localStorage.removeItem('fittempo_history');", "integratedHistory=[];");
  for(const id of ['soundIcon','voiceIcon'])html=html.replace(new RegExp(id+'\\.className = ([^;]+);','g'),`${id}.setAttribute('class',$1);`);
  const voiceStart=html.indexOf('            guideVoice ='),voiceEnd=html.indexOf('            return guideVoice;',voiceStart);
  html=html.slice(0,voiceStart)+"            guideVoice=voices.find(v=>/^pt[-_]PT$/i.test(v.lang)&&v.localService)||voices.find(v=>/^pt[-_]PT$/i.test(v.lang))||null;\n"+html.slice(voiceEnd);

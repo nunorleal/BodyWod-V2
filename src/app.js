@@ -10,10 +10,14 @@ import {muscleMap} from './anatomy.js';
 import {exercises,categories,byId} from './exercises.js';
 import {generate,rebuild,editItem,regenerateBlock,alternatives,repetitionTarget,modalities,levels,updateWarmupReferences,updateRepetitionTargets} from './generator.js';
 import {SessionClock,formatTime} from './timer.js';
-import {createStore} from './storage.js';
+import {openWorkoutStore} from './archive.js';
 import {CoachAudio,repetitionAt} from './audio.js';
+async function startBodyWOD(){
 const app=document.querySelector('#app'),modal=document.querySelector('#modal'),content=document.querySelector('#modal-content');
-const store=createStore(),audio=new CoachAudio(()=>store.state.preferences,status=>paintAudioStatus(status),()=>{const session=clock;if(!session?.running)return;session.hold();return()=>session.releaseHold()});
+const store=await openWorkoutStore(state=>{
+ const history=legacyCounterData().history;
+ if(history.length)state.fittempo=mergeFitTempo({history},state.fittempo);
+}),audio=new CoachAudio(()=>store.state.preferences,status=>paintAudioStatus(status),()=>{const session=clock;if(!session?.running)return;session.hold();return()=>session.releaseHold()});
 let counterMode='counter';
 let page='launcher',plan=store.state.lastPlan,clock=null,frame=null,wakeLock=null,search='',filter='Todos',onlyFavorites=false,summary=store.state.unsavedSummary||null,rating=0,modalExercise=null,editing=null,amrapIndex=0,lastCheckpoint=0,installPrompt=null;
 let config={minutes:30,level:1,modality:'Full Body',warmup:true,cooldown:3,lowImpact:false,preferFavorites:true,included:[]};
@@ -28,15 +32,16 @@ let lastStorageWarning='';
 function paintStorageStatus(){
  let banner=document.querySelector('#storage-status');
  if(!store.warning){banner?.remove();lastStorageWarning='';return}
+ if(banner&&lastStorageWarning===store.warning)return;
  if(!banner){banner=document.createElement('aside');banner.id='storage-status';banner.className='notice warning';banner.setAttribute('role','status');document.querySelector('main')?.prepend(banner)}
- banner.innerHTML=`<strong>Dados por guardar</strong><p>${escape(store.warning)}</p>${btn('navigate','Ir ao início para exportar','secondary','data-page="launcher"')}${!store.status.readFailed?btn('retryStorage','Tentar guardar novamente','secondary'):''}`;
+ banner.innerHTML=`<strong>Dados por guardar</strong><p>${escape(store.warning)}</p>${btn('export',`${icon('download')} Guardar ficheiro JSON`,'secondary')}${!store.status.readFailed?btn('retryStorage','Tentar guardar novamente','secondary'):''}`;
  if(lastStorageWarning!==store.warning){toast(store.warning);lastStorageWarning=store.warning}
 }
-function save(fn){const ok=store.update(fn);paintStorageStatus();return ok}
+async function save(fn){const ok=await store.update(fn);paintStorageStatus();return ok}
 const countStats=()=>{const h=store.state.history.filter(s=>s.status==='completed');return {sessions:h.length,minutes:Math.round(h.reduce((s,h)=>s+h.actualSeconds,0)/60),week:h.filter(s=>Date.now()-new Date(s.date).getTime()<7*864e5).length}};
 function header(){return `<header><div class="logo">${icon('bolt')}<b class="brand-name">BODY<span>WOD</span><small class="brand-author">Nuno Leal</small></b></div><div class="header-actions"><button class="icon-button" data-action="navigate" data-page="launcher" aria-label="Página inicial" title="Escolher Crossfit ou FitTempo">${icon('home')}</button><button class="icon-button" data-action="settings" aria-label="Definições">${icon('settings')}</button></div></header>`}
 function nav(){return `<nav class="navigation" aria-label="Navegação principal">${[['home','home','Início'],['generate','bolt','Gerar treino'],['library','library','Biblioteca'],['saved','heart','Meus treinos'],['history','history','Histórico']].map(([id,i,label])=>`<button data-action="navigate" data-page="${id}" ${id==='counter'?'aria-label="Contador de repetições"':''} class="${page===id?'active':''}" ${page===id?'aria-current="page"':''}>${icon(i)}<span>${label}</span></button>`).join('')}</nav>`}
-function launcher(){return `<div class="launcher-brand"><span class="logo">${icon('bolt')}<b class="brand-name">BODY<span>WOD</span><small class="brand-author">Nuno Leal</small></b></span><div class="launcher-data-tools" role="group" aria-label="Dados do Crossfit e do FitTempo"><button class="icon-button" data-action="export" aria-label="Exportar dados" title="Exportar dados do Crossfit e do FitTempo">${icon('download')}</button><button class="icon-button" data-action="importBackup" aria-label="Importar dados" title="Importar dados do Crossfit e do FitTempo">${icon('upload')}</button></div></div><div class="launcher-intro"><div class="eyebrow">O TEU TREINO COMEÇA AQUI</div><h1>Como queres<br>treinar hoje?</h1><p class="sub">Escolhe a tua experiência.</p></div><div class="launcher-choices"><button class="launcher-choice crossfit-choice" data-action="navigate" data-page="home" aria-label="Crossfit"><span class="launcher-icon">${icon('bolt')}</span><span class="launcher-copy"><strong>Crossfit</strong><span>Treinos funcionais à tua medida</span><small>Planos · exercícios · evolução</small></span><span class="launcher-arrow">${icon('arrow')}</span></button><button class="launcher-choice fittempo-choice" data-action="navigate" data-page="counter" aria-label="FitTempo"><span class="launcher-icon">${icon('clock')}</span><span class="launcher-copy"><strong>FitTempo</strong><span>O teu ritmo, repetição a repetição</span><small>Contador · cadência · séries por toque</small></span><span class="launcher-arrow">${icon('arrow')}</span></button></div>`}
+function launcher(){return `<div class="launcher-brand"><span class="logo">${icon('bolt')}<b class="brand-name">BODY<span>WOD</span><small class="brand-author">Nuno Leal</small></b></span><div class="launcher-data-tools" role="group" aria-label="Dados do Crossfit e do FitTempo"><button class="icon-button" data-action="export" aria-label="Exportar dados" title="Guardar dados de Crossfit e FitTempo em JSON">${icon('download')}</button><button class="icon-button" data-action="importBackup" aria-label="Importar dados" title="Importar dados do Crossfit e do FitTempo">${icon('upload')}</button></div></div><div class="launcher-intro"><div class="eyebrow">O TEU TREINO COMEÇA AQUI</div><h1>Como queres<br>treinar hoje?</h1><p class="sub">Escolhe a tua experiência.</p></div><div class="launcher-choices"><button class="launcher-choice crossfit-choice" data-action="navigate" data-page="home" aria-label="Crossfit"><span class="launcher-icon">${icon('bolt')}</span><span class="launcher-copy"><strong>Crossfit</strong><span>Treinos funcionais à tua medida</span><small>Planos · exercícios · evolução</small></span><span class="launcher-arrow">${icon('arrow')}</span></button><button class="launcher-choice fittempo-choice" data-action="navigate" data-page="counter" aria-label="FitTempo"><span class="launcher-icon">${icon('clock')}</span><span class="launcher-copy"><strong>FitTempo</strong><span>O teu ritmo, repetição a repetição</span><small>Contador · cadência · séries por toque</small></span><span class="launcher-arrow">${icon('arrow')}</span></button></div>`}
 function home(){const s=countStats(),last=store.state.history[0];return `${header()}<div class="eyebrow">O TEU ESPAÇO DE TREINO</div><h1>O próximo passo<br>é teu<span style="color:var(--mint)">.</span></h1><p class="sub">Só precisas de ti. Nós tratamos do plano.</p>
 <section class="hero card"><span class="pill"><i class="dot"></i> ZERO EQUIPAMENTO</span><span class="hero-mark" aria-hidden="true">W</span><h2>Corpo livre.<br>Mente forte.</h2><p>Um treino à tua medida.<br>Do aquecimento ao último segundo.</p>${btn('navigate',`Criar o meu treino ${icon('arrow')}`,'primary full','data-page="generate"')}</section>
 <div class="stats"><div class="stat"><strong>${s.sessions}</strong><span>treinos concluídos</span></div><div class="stat"><strong>${s.minutes}<span style="display:inline;font-size:11px"> min</span></strong><span>em movimento</span></div><div class="stat"><strong>${s.week}<span style="display:inline;font-size:11px"> / semana</span></strong><span>nos últimos 7 dias</span></div></div>
@@ -123,10 +128,11 @@ async function startSession(recover=false){
  checkpoint();frame=requestAnimationFrame(sessionTick);
 }
 function finishSession(status){cancelAnimationFrame(frame);clock.pause();audio.stop();releaseWake();const snap=clock.getSnapshot();summary={id:crypto.randomUUID(),date:new Date().toISOString(),plan:structuredClone(clock.plan),actualSeconds:Math.round(clock.activeElapsed),timelineSeconds:Math.round(snap.elapsed),status,completedSteps:[...clock.completedSteps],completedReps:structuredClone(clock.completedReps),rounds:structuredClone(clock.rounds),changes:structuredClone(clock.changes),rating:0,notes:''};
- if(!save(s=>{s.history.unshift(summary);s.session=null})){openModal(`${modalHead('Não foi possível guardar')}<p class="small">O resumo continua em memória. Exporta os dados antes de fechar a aplicação.</p>${btn('backupHome','Ir ao início para exportar','primary full')}`)}
+ save(s=>{s.history.unshift(summary);s.session=null}).then(ok=>{if(ok)document.querySelector('#summary-storage')?.removeAttribute('hidden')});
+ clock=null;
  rating=0;page='summary';render();if(status==='completed'){celebrateWorkout(`${summary.plan.name} · ${formatTime(summary.actualSeconds)}`);audio.unlock().then(()=>audio.beep('finish'));setTimeout(()=>audio.speak('Treino concluído. Muito bem! Reserva um momento para recuperar.'),850)}
 }
-function summaryPage(){if(!summary)return home();return `${header()}<div class="success-ring">${icon('check')}</div><div class="center"><div class="eyebrow">MAIS UM PASSO DADO</div><h1>${summary.status==='completed'?'O esforço é teu.<br>A conquista também.':'Por hoje, está feito.'}</h1><p class="sub">${escape(summary.plan.name)}</p></div><div class="stats"><div class="stat"><strong>${formatTime(summary.actualSeconds)}</strong><span>tempo ativo</span></div><div class="stat"><strong>${formatTime(summary.plan.duration)}</strong><span>programados</span></div><div class="stat"><strong>${summary.completedSteps.filter(id=>summary.plan.timeline.find(t=>t.id===id)?.kind==='work').length}</strong><span>séries concluídas</span></div></div><div class="callout">${summary.status==='completed'?'Sessão concluída':'Sessão terminada antecipadamente'} · guardada no histórico. ${summary.changes.length?summary.changes.length+' alterações registadas.':''}</div><form id="summary-form"><div class="field"><label for="summary-name">Dá um nome a este treino</label><input id="summary-name" name="name" value="${escape(summary.plan.name)}" maxlength="80" required></div><div class="field"><label>Como correu?</label><div class="stars" role="group" aria-label="Classificação de 1 a 5">${[1,2,3,4,5].map(n=>btn('rate','★',n<=rating?'on':'',`type="button" data-value="${n}" aria-label="${n} estrelas" aria-pressed="${n<=rating}"`)).join('')}</div></div><div class="field"><label for="summary-notes">Notas da sessão</label><textarea name="notes" id="summary-notes" placeholder="Como te sentiste? O que queres melhorar?" maxlength="2000"></textarea></div><label class="toggle"><span>Marcar como favorito</span><input type="checkbox" name="favorite"></label><button class="primary full" style="margin-top:22px">Guardar treino e avaliação ${icon('heart')}</button></form>${btn('navigate','Voltar ao início','secondary full','style="margin-top:10px" data-page="home"')}`}
+function summaryPage(){if(!summary)return home();return `${header()}<div class="success-ring">${icon('check')}</div><div class="center"><div class="eyebrow">MAIS UM PASSO DADO</div><h1>${summary.status==='completed'?'O esforço é teu.<br>A conquista também.':'Por hoje, está feito.'}</h1><p class="sub">${escape(summary.plan.name)}</p></div><div class="stats"><div class="stat"><strong>${formatTime(summary.actualSeconds)}</strong><span>tempo ativo</span></div><div class="stat"><strong>${formatTime(summary.plan.duration)}</strong><span>programados</span></div><div class="stat"><strong>${summary.completedSteps.filter(id=>summary.plan.timeline.find(t=>t.id===id)?.kind==='work').length}</strong><span>séries concluídas</span></div></div><div class="callout">${summary.status==='completed'?'Sessão concluída':'Sessão terminada antecipadamente'} <span id="summary-storage" ${store.status.persistent?'':'hidden'}>· guardada no histórico</span>. ${summary.changes.length?summary.changes.length+' alterações registadas.':''}</div><form id="summary-form"><div class="field"><label for="summary-name">Dá um nome a este treino</label><input id="summary-name" name="name" value="${escape(summary.plan.name)}" maxlength="80" required></div><div class="field"><label>Como correu?</label><div class="stars" role="group" aria-label="Classificação de 1 a 5">${[1,2,3,4,5].map(n=>btn('rate','★',n<=rating?'on':'',`type="button" data-value="${n}" aria-label="${n} estrelas" aria-pressed="${n<=rating}"`)).join('')}</div></div><div class="field"><label for="summary-notes">Notas da sessão</label><textarea name="notes" id="summary-notes" placeholder="Como te sentiste? O que queres melhorar?" maxlength="2000"></textarea></div><label class="toggle"><span>Marcar como favorito</span><input type="checkbox" name="favorite"></label><button class="primary full" style="margin-top:22px">Guardar treino e avaliação ${icon('heart')}</button></form>${btn('navigate','Voltar ao início','secondary full','style="margin-top:10px" data-page="home"')}`}
 function persistPlan(){save(s=>{s.lastPlan=plan})}
 function usePlan(p){plan=applySavedCadences(updateRepetitionTargets(updateWarmupReferences(p,{excluded:store.state.excluded})),store.state.exerciseCadences);config={...plan.config};page='preview';persistPlan();render()}
 function newPlan(){config.excluded=[...store.state.excluded];plan=generate(config,store.state);persistPlan();page='preview';render()}
@@ -139,7 +145,7 @@ async function handleClick(event){const el=event.target.closest('[data-action]')
  if(a==='counterMode'){sequenceUI.suspend();counterMode=el.dataset.value;render()}
  else if(a==='navigate'){sequenceUI.suspend();captureConfig();if(page==='counter')pauseCounterPanel(document.getElementById('counter-panel'));if(el.dataset.page==='counter'){audio.stop();if(clock?.running){clock.pause();releaseWake();checkpoint()}}page=el.dataset.page;if(page==='library'){onlyFavorites=false;filter='Todos'}render()}
  else if(a==='settings'||a==='sessionAudio'){sequenceUI.suspend();if(page==='counter')pauseCounterPanel(document.getElementById('counter-panel'));if(a==='sessionAudio'&&clock.running){clock.pause();audio.stop();releaseWake();checkpoint()}settings()}
- else if(a==='retryStorage'){const ok=store.retry();paintStorageStatus();if(ok)toast('Dados guardados neste dispositivo.')}
+ else if(a==='retryStorage'){const ok=await store.retry();paintStorageStatus();if(ok)toast('Dados guardados neste dispositivo.')}
  else if(a==='closeModal'){modal.close();editing=null;modalExercise=null}
  else if(a==='duration'){captureConfig();config.minutes=Number(el.dataset.value);render({scroll:false})}
  else if(a==='level'){captureConfig();config.level=Number(el.dataset.value);render({scroll:false})}
@@ -157,10 +163,10 @@ async function handleClick(event){const el=event.target.closest('[data-action]')
  else if(a==='edit')editDialog(el.dataset.block,el.dataset.item);
  else if(a==='regenerate'){plan=regenerateBlock(plan,el.dataset.block,store.state);persistPlan();render({scroll:false});toast('Bloco renovado. Duração preservada.')}
  else if(a==='moveUp'||a==='moveDown'){const b=plan.blocks.find(b=>b.id===editing.blockId),i=b.items.findIndex(i=>i.id===editing.itemId),j=i+(a==='moveUp'?-1:1);if(j>=0&&j<b.items.length){[b.items[i],b.items[j]]=[b.items[j],b.items[i]];rebuild(plan);persistPlan();render({scroll:false});toast('Ordem atualizada.')}else toast('O exercício já está no limite da lista.')}
- else if(a==='savePlan'){updatePlanName();if(save(s=>{const at=s.saved.findIndex(p=>p.id===plan.id);if(at<0)s.saved.unshift(structuredClone(plan));else s.saved[at]=structuredClone(plan);s.lastPlan=plan}))toast('Treino guardado no dispositivo.')}
+ else if(a==='savePlan'){updatePlanName();if(await save(s=>{const at=s.saved.findIndex(p=>p.id===plan.id);if(at<0)s.saved.unshift(structuredClone(plan));else s.saved[at]=structuredClone(plan);s.lastPlan=plan}))toast('Treino guardado no dispositivo.')}
  else if(a==='start'){updatePlanName();if(store.state.session&&!clock){openModal(`${modalHead('Já existe uma sessão')}<p class="small muted">Recupera o treino em pausa ou termina essa sessão antes de iniciar outra.</p>${btn('recover','Recuperar sessão','primary full','style="margin-top:20px"')}${btn('discardSession','Eliminar sessão em pausa','danger full','style="margin-top:10px"')}`)}else{persistPlan();await startSession()}}
  else if(a==='recover'){modal.close();await startSession(true)}
- else if(a==='discardSession'){if(save(s=>{s.session=null})){modal.close();toast('Sessão em pausa eliminada. Podes iniciar o novo treino.')}}
+ else if(a==='discardSession'){if(await save(s=>{s.session=null})){modal.close();toast('Sessão em pausa eliminada. Podes iniciar o novo treino.')}}
  else if(a==='changePace'){changeExercisePace(el.dataset.direction)}
  else if(a==='togglePause'){if(clock.running){clock.pause();audio.stop();releaseWake()}else{await audio.unlock();clock.resume();audio.speak('Começa.',{hold:true});requestWake()}checkpoint();paintClock(clock.getSnapshot())}
  else if(a==='nextStep'||a==='previousStep'){const s=clock.getSnapshot();audio.stop();audio.resetCue();if(clock.running)await audio.unlock();if(a==='nextStep'){if(s.index===clock.plan.timeline.length-1){openModal(`${modalHead('Terminar agora?')}<p class="small">O último intervalo ainda não terminou. A sessão será guardada como terminada antecipadamente.</p>${btn('confirmStop','Terminar sessão','danger full','style="margin-top:20px"')}`);clock.pause();audio.stop();releaseWake();checkpoint();return}clock.seek(s.step.end,'Etapa avançada manualmente')}else clock.seek(clock.plan.timeline[Math.max(0,s.index-1)].start,'Etapa anterior repetida');paintedStep='';checkpoint()}
@@ -179,7 +185,6 @@ async function handleClick(event){const el=event.target.closest('[data-action]')
  else if(a==='historyDetails')showHistory(id);
  else if(a==='rate'){rating=Number(el.dataset.value);app.querySelectorAll('[data-action="rate"]').forEach(b=>{b.classList.toggle('on',Number(b.dataset.value)<=rating);b.setAttribute('aria-pressed',Number(b.dataset.value)<=rating)})}
  else if(a==='testAudio'){if(page==='active'&&clock?.running){clock.pause();audio.stop();releaseWake();checkpoint();paintClock(clock.getSnapshot())}const activation=audio.unlock();audio.speak('Teste de som. Flexões. Série dois. Quinze repetições.');await activation;const beep=audio.beep('start');paintAudioStatus(audio.status);if(!beep)toast(audio.status.error||'Ativa os bips e aumenta o volume nas definições.');else if(!audio.voice)toast('Bip emitido. A voz pt-PT não está disponível neste navegador.');}
- else if(a==='backupHome'){modal.close();page='launcher';render()}
  else if(a==='export'){await exportAllData()}
  else if(a==='importBackup'){document.getElementById('import-file').click()}
  else if(a==='includeExercises'){captureConfig();openModal(`${modalHead('Incluir no próximo treino')}<p class="small muted">Escolhe até 6 movimentos compatíveis com o teu nível e impacto. A seleção respeita os grupos do treino; se não couber, o gerador avisa.</p><form id="include-form"><div style="max-height:50vh;overflow:auto;margin:15px 0">${exercises.filter(e=>categories.indexOf(e.category)<6&&suitableForMain(e,config.level)&&e.difficulty<=config.level&&(!config.lowImpact||e.impact==='low')&&!store.state.excluded.includes(e.id)).map(e=>`<label class="toggle"><span>${escape(e.name)}</span><input type="checkbox" name="include" value="${e.id}" ${config.included.includes(e.id)?'checked':''}></label>`).join('')}</div><button class="primary full">Aplicar seleção</button></form>`)}
@@ -189,14 +194,14 @@ app.addEventListener('submit',submit);content.addEventListener('submit',submit);
 async function submit(event){event.preventDefault();const form=event.target,f=new FormData(form);try{
  if(form.id==='config-form'){captureConfig();newPlan()}
  else if(form.id==='edit-form'){const b=plan.blocks.find(b=>b.id===editing.blockId),i=b.items.find(i=>i.id===editing.itemId);const exercise=f.get('exercise')===i.exercise.id?i.exercise:structuredClone(byId[f.get('exercise')]);plan.config.excluded=[...store.state.excluded];plan=editItem(plan,editing.blockId,editing.itemId,{exercise,sets:Number(f.get('sets')),work:Number(f.get('work')),rest:Number(f.get('rest')),reps:f.get('reps')?Number(f.get('reps')):null,locked:f.has('locked')});save(s=>{s.lastPlan=plan;const saved=s.saved.findIndex(p=>p.id===plan.id);if(saved>=0)s.saved[saved]=structuredClone(plan)});modal.close();render({scroll:false});toast('Plano atualizado. Duração exata preservada.')}
- else if(form.id==='settings-form'){const stored=save(s=>{s.preferences={...s.preferences,voice:f.has('voice'),beeps:f.has('beeps'),advanceWarning:f.has('advanceWarning'),voiceURI:f.get('voiceURI'),voiceMode:f.get('voiceMode'),voiceVolume:Number(f.get('voiceVolume')),beepVolume:Number(f.get('beepVolume'))}});audio.refreshVoices();modal.close();toast(stored?'Preferências guardadas.':'Preferências aplicadas apenas nesta sessão. Exporta os dados antes de fechar.')}
+ else if(form.id==='settings-form'){const stored=await save(s=>{s.preferences={...s.preferences,voice:f.has('voice'),beeps:f.has('beeps'),advanceWarning:f.has('advanceWarning'),voiceURI:f.get('voiceURI'),voiceMode:f.get('voiceMode'),voiceVolume:Number(f.get('voiceVolume')),beepVolume:Number(f.get('beepVolume'))}});audio.refreshVoices();modal.close();toast(stored?'Preferências guardadas.':'Preferências aplicadas apenas nesta sessão. Exporta os dados antes de fechar.')}
  else if(form.id==='include-form'){const included=f.getAll('include');if(included.length>6)throw Error('Escolhe no máximo 6 exercícios.');config.included=included;modal.close();render({scroll:false})}
  else if(form.id==='reps-form'){const s=clock.getSnapshot(),n=Number(f.get('reps'));if(!Number.isInteger(n)||n<0||n>999)throw Error('Número de repetições inválido.');if(form.dataset.amrap==='true'){const b=clock.plan.blocks.find(b=>b.id===s.step.blockId);const key=s.step.id+'-movement-'+amrapIndex;clock.completedReps[key]=n;amrapIndex++;if(amrapIndex%b.items.length===0)clock.rounds[s.step.id]=(clock.rounds[s.step.id]||0)+1;clock.changes.push({at:s.elapsed,reason:`AMRAP: ${n} ${b.items[(amrapIndex-1)%b.items.length].reps?'repetições':'segundos'} em ${b.items[(amrapIndex-1)%b.items.length].exercise.name}`})}else{clock.completedReps[s.step.id]=n;if(s.step.format==='emom'){
  if(!clock.completedSteps.includes(s.step.id))clock.completedSteps.push(s.step.id);
  // Finish early within the minute: the remaining execution budget becomes rest without advancing global time.
  const remaining=s.step.end-s.elapsed;if(remaining>0){const split=Math.max(0,s.elapsed-s.step.start);const rest=clock.plan.timeline[s.index+1];s.step.duration=split;s.step.end=s.elapsed;if(rest?.kind==='rest'){rest.start=s.elapsed;rest.duration=rest.end-rest.start}clock.lastIndex=-1;clock.changes.push({at:s.elapsed,reason:'EMOM: execução confirmada; restante minuto para descanso.'})}
  }}modal.close();await audio.unlock();clock.resume();requestWake();checkpoint();paintedStep=''}
- else if(form.id==='summary-form'){summary.plan.name=String(f.get('name')).trim()||summary.plan.name;summary.rating=rating;summary.notes=String(f.get('notes'));summary.plan.notes=summary.notes;summary.plan.rating=rating;summary.plan.favorite=f.has('favorite');if(save(s=>{const h=s.history.findIndex(h=>h.id===summary.id);if(h>=0)s.history[h]=structuredClone(summary);else s.history.unshift(structuredClone(summary));const p=s.saved.findIndex(p=>p.id===summary.plan.id);if(p>=0)s.saved[p]=structuredClone(summary.plan);else s.saved.unshift(structuredClone(summary.plan))})){page='saved';render();toast('Treino e avaliação guardados.')}}
+ else if(form.id==='summary-form'){summary.plan.name=String(f.get('name')).trim()||summary.plan.name;summary.rating=rating;summary.notes=String(f.get('notes'));summary.plan.notes=summary.notes;summary.plan.rating=rating;summary.plan.favorite=f.has('favorite');if(await save(s=>{const h=s.history.findIndex(h=>h.id===summary.id);if(h>=0)s.history[h]=structuredClone(summary);else s.history.unshift(structuredClone(summary));const p=s.saved.findIndex(p=>p.id===summary.plan.id);if(p>=0)s.saved[p]=structuredClone(summary.plan);else s.saved.unshift(structuredClone(summary.plan))})){page='saved';render();toast('Treino e avaliação guardados.')}}
  }catch(err){const error=document.getElementById('edit-error');if(form.id==='edit-form'&&error)error.textContent=err.message;else toast(err.message);console.error(err)}}
 app.addEventListener('input',e=>{if(e.target.id==='custom-minutes'){const minutes=Number(e.target.value);if(e.target.validity.valid)config.minutes=minutes;app.querySelectorAll('[data-action="duration"]').forEach(button=>{const selected=e.target.validity.valid&&Number(button.dataset.value)===minutes;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected))})}if(e.target.id==='search'){const selection=e.target.selectionStart;search=e.target.value;render({scroll:false});const input=document.getElementById('search');input.focus();input.setSelectionRange(selection,selection)}});
 app.addEventListener('change',e=>{if(e.target.id==='only-favorites'){onlyFavorites=e.target.checked;render({scroll:false})}if(e.target.id==='plan-name'){updatePlanName();persistPlan()}});
@@ -211,31 +216,37 @@ const celebrateWorkout=createWorkoutCelebration();
 const sequenceUI=createSequenceUI({store,save,toast,showExercise:showDetails,onComplete:record=>celebrateWorkout(`${record.plan.name} · ${formatTime(record.duration)}`)});
 render();
 
+function legacyCounterData(){
+ try{return validateFitTempo({history:JSON.parse(localStorage.getItem('fittempo_history')||'[]')})}
+ catch{return {history:[]}}
+}
 async function currentCounterData(){
  const live=await requestCounterBackup(document.getElementById('counter-panel'));
- if(live){validateFitTempo(live);return live}
- if(store.state.fittempo)return structuredClone(store.state.fittempo);
- try{const history=JSON.parse(localStorage.getItem('fittempo_history')||'[]');return validateFitTempo({history})}catch{throw Error('Não foi possível ler os dados do FitTempo. Abre o FitTempo e tenta novamente.')}
+ if(live)return validateFitTempo(live);
+ return store.state.fittempo||legacyCounterData();
 }
 async function exportAllData(){
- if(clock)checkpoint();
- const fittempo=await currentCounterData();
- const snapshot={...store.state,generatorConfig:structuredClone(config),fittempo,unsavedSummary:summary||store.state.unsavedSummary||null};
+ let fittempo,usedStoredCounter=false;
+ try{fittempo=await currentCounterData()}
+ catch{fittempo=store.state.fittempo||legacyCounterData();usedStoredCounter=true}
+ const snapshot={...store.state,session:clock&&page==='active'?clock.serialize():store.state.session,generatorConfig:structuredClone(config),fittempo,unsavedSummary:summary||store.state.unsavedSummary||null};
  const blob=new Blob([JSON.stringify(makeBackup(snapshot,APP_VERSION),null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),link=document.createElement('a');
- link.href=url;link.download=`bodywod-completo-${new Date().toISOString().slice(0,10)}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),5000);toast('Cópia JSON de Crossfit e FitTempo exportada.');
+ link.href=url;link.download=`bodywod-completo-${new Date().toISOString().replace(/[:.]/g,'-')}.json`;
+ document.body.append(link);link.click();link.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),60000);
+ toast(usedStoredCounter?'Ficheiro JSON preparado com a última cópia disponível do contador.':'Ficheiro JSON de Crossfit e FitTempo preparado.');
 }
 async function importAllData(file){
  try{
- if(file.size>100e6)throw Error('Backup demasiado grande (máximo 100 MB).');
  const incoming=parseBackup(await file.text());
  const currentFitTempo=await currentCounterData();
  const merged=mergeBackup({...store.state,fittempo:currentFitTempo},incoming);
  if(merged.session)merged.session.wasRunning=false;
- const durable=save(s=>Object.assign(s,merged));
+ const durable=await save(s=>Object.assign(s,merged));
  if(incoming.generatorConfig)config={...config,...incoming.generatorConfig};
  summary=store.state.unsavedSummary||summary;plan=clock?.plan||store.state.lastPlan;
  if(incoming.fittempo)restoreCounterBackup(document.getElementById('counter-panel'),merged.fittempo);
- audio.refreshVoices();modal.close();render({scroll:false});toast(durable?'Backup importado. Registos reunidos sem duplicados.':'Backup importado apenas em memória. Exporta antes de fechar.');
+ audio.refreshVoices();modal.close();render({scroll:false});toast(durable?'Backup importado. Registos reunidos sem duplicados.':'Dados importados em memória. Guarda um ficheiro JSON antes de fechar.');
  }catch(error){toast(error.message||'Não foi possível importar o backup.');}
 }
 window.addEventListener('message',event=>{
@@ -244,7 +255,7 @@ window.addEventListener('message',event=>{
  try{
  const incoming=validateFitTempo(event.data.data);
  if(event.data.type==='bodywod-counter-data-ready'&&store.state.fittempo){
- const combined=mergeFitTempo(incoming,store.state.fittempo);save(s=>{s.fittempo=combined});restoreCounterBackup(document.getElementById('counter-panel'),combined);
+ restoreCounterBackup(document.getElementById('counter-panel'),store.state.fittempo);
  }else save(s=>{s.fittempo=incoming});
  }catch{toast('Não foi possível sincronizar os dados do FitTempo.');}
 });
@@ -262,3 +273,5 @@ function changeExercisePace(direction){
  const next=clock.getSnapshot();audio.lastRep=repetitionAt(next.step,next.elapsed-next.step.start);audio.lastElapsed=next.elapsed-next.step.start;audio.clusterRest=clusterPause(next.step,audio.lastElapsed)?.group||null;
  if(wasRunning)clock.resume();checkpoint();paintClock(clock.getSnapshot());toast(`${cadence.toLocaleString('pt-PT')} s por repetição · ritmo guardado · tempo restante ${formatTime(clock.getSnapshot().totalRemaining)}`);
 }
+}
+startBodyWOD().catch(error=>console.error('Não foi possível iniciar o BodyWOD.',error));

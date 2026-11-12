@@ -14,6 +14,13 @@ export function sequenceCategory(exercise,category){
 }
 export const sequenceId=()=>globalThis.crypto?.randomUUID?.()||String(Date.now()+Math.random());
 export const newSequence=(defaults={sets:3,reps:10})=>({id:sequenceId(),name:'A minha sequência',defaults:{...defaults},items:[]});
+export function duplicateSequence(plan){
+ const copy=structuredClone(plan),suffix=' (cópia)';
+ copy.id=sequenceId();
+ copy.name=copy.name.slice(0,80-suffix.length).replace(/[\uD800-\uDBFF]$/,'').trimEnd()+suffix;
+ for(const item of copy.items)item.id=sequenceId();
+ return copy;
+}
 export const emptySequences=()=>({draft:newSequence(),plans:[],cadences:{},verifiedCadences:{},history:[],session:null});
 export function sequenceCadence(exerciseId,cadences={}){if(exerciseId===sequenceRestExercise.id)return 1;return cadences[exerciseId]??executionCadence(byId[exerciseId],3)??2}
 export function sequenceItem(exerciseId,defaults){if(exerciseId===sequenceRestExercise.id)return {id:sequenceId(),exerciseId,mode:'time',reps:1,seconds:60,sets:1,rest:0,phase:'training'};const e=byId[exerciseId];if(!e)throw Error('Exercício não encontrado.');return {id:sequenceId(),exerciseId,mode:e.execution==='reps'?'reps':'time',reps:e.recommendedReps||10,seconds:e.recommendedSeconds||30,sets:defaults?.sets??1,rest:15,...(defaults?{reps:defaults.reps}:{})}}
